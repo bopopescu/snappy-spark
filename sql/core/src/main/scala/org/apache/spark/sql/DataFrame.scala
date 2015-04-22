@@ -19,15 +19,12 @@ package org.apache.spark.sql
 
 import java.io.CharArrayWriter
 import java.sql.DriverManager
-
 import scala.collection.JavaConversions._
 import scala.language.implicitConversions
 import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.TypeTag
 import scala.util.control.NonFatal
-
 import com.fasterxml.jackson.core.JsonFactory
-
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.api.python.SerDeUtil
@@ -44,6 +41,7 @@ import org.apache.spark.sql.json.JsonRDD
 import org.apache.spark.sql.types.{NumericType, StructType}
 import org.apache.spark.sql.sources.{ResolvedDataSource, CreateTableUsingAsSelect}
 import org.apache.spark.util.Utils
+import scala.util.Sorting
 
 
 private[sql] object DataFrame {
@@ -675,6 +673,45 @@ class DataFrame private[sql](
    */
   def sample(withReplacement: Boolean, fraction: Double): DataFrame = {
     sample(withReplacement, fraction, Utils.random.nextLong)
+  }
+
+  /**
+   * Creates stratified sampled data from given DataFrame
+   * {{{
+   *   peopleDf.stratifiedSample(Array(1,2), 0.01)
+   * }}}
+   */
+  def stratifiedSample(qcs: Array[Int], fraction: Double): DataFrame = {
+    StratifiedSample(qcs, fraction, logicalPlan)
+  }
+
+  /**
+   * Creates stratified sampled data from given DataFrame
+   * {{{
+   *   peopleDf.stratifiedSample(Array("c1","c2"), 0.01)
+   * }}}
+   */
+  def stratifiedSample(qcs: Array[String], fraction: Double): DataFrame = {
+    val cols = columns
+    val colIndexes = qcs.map { col: String =>
+      val colIndex = cols.indexOf(col)
+      if (colIndex >= 0) colIndex
+      else throw new AnalysisException(
+        s"""Cannot resolve column name "$col" among (${
+          schema.fieldNames.mkString(", ")})""")
+    }
+    Sorting.quickSort(colIndexes)
+    StratifiedSample(colIndexes, fraction, logicalPlan)
+  }
+
+  /**
+   * Creates stratified sampled data from given DataFrame
+   * {{{
+   *   peopleDf.stratifiedSample("c1,c2", 0.01)
+   * }}}
+   */
+  def stratifiedSample(qcs: String, fraction: Double): DataFrame = {
+    stratifiedSample(qcs.split(","), fraction)
   }
 
   /**
