@@ -15,29 +15,35 @@
  * limitations under the License.
  */
 
-package org.apache.spark.util.collection
+package org.apache.spark.sql.collection
 
 import scala.reflect.ClassTag
-
-import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.sql.Row
+import org.apache.spark.sql.types.DataType
+import org.apache.spark.sql.catalyst.expressions.SpecificMutableRow
 
 /**
- * :: DeveloperApi ::
  * A fast hash map implementation for nullable keys. This hash map supports insertions and updates,
  * but not deletions. This map is about 5X faster than java.util.HashMap, while using much less
  * space overhead.
  *
  * Under the hood, it uses our MultiColumnOpenHashSet implementation.
  */
-@DeveloperApi
-private[spark] class MultiColumnOpenHashMap[K: ClassTag, @specialized(Long, Int, Double) V: ClassTag](
-  initialCapacity: Int)
-    extends Iterable[(K, V)]
-    with Serializable {
+private[spark] class MultiColumnOpenHashMap[@specialized(Long, Int, Double) V: ClassTag](
+    val columns: Array[Int],
+    val types: Array[DataType],
+    val numColumns: Int,
+    val initialCapacity: Int,
+    val loadFactor: Double) extends Iterable[(Row, V)] with Serializable {
 
-  def this() = this(64)
+  def this(columns: Array[Int], types: Array[DataType], initialCapacity: Int) =
+    this(columns, types, columns.length, initialCapacity, 0.7)
 
-  protected var _keySet = new MultiColumnOpenHashSet[K](initialCapacity)
+  def this(columns: Array[Int], types: Array[DataType]) =
+    this(columns, types, 64)
+
+  protected var _keySet = new MultiColumnOpenHashSet(columns, types,
+    numColumns, initialCapacity, loadFactor)
 
   // Init in constructor (instead of in declaration) to work around a Scala compiler specialization
   // bug that would generate two arrays (one for Object and one for specialized T).
@@ -53,38 +59,38 @@ private[spark] class MultiColumnOpenHashMap[K: ClassTag, @specialized(Long, Int,
   override def size: Int = if (haveNullValue) _keySet.size + 1 else _keySet.size
 
   /** Tests whether this map contains a binding for a key. */
-  def contains(k: K): Boolean = {
-    if (k == null) {
-      haveNullValue
-    } else {
+  def contains(k: Row): Boolean = {
+    if (k != null) {
       _keySet.getPos(k) != MultiColumnOpenHashSet.INVALID_POS
+    } else {
+      haveNullValue
     }
   }
 
   /** Get the value for a given key */
-  def apply(k: K): V = {
-    if (k == null) {
-      nullValue
-    } else {
+  def apply(k: Row): V = {
+    if (k != null) {
       val pos = _keySet.getPos(k)
-      if (pos < 0) {
-        null.asInstanceOf[V]
-      } else {
+      if (pos >= 0) {
         _values(pos)
+      } else {
+        null.asInstanceOf[V]
       }
+    } else {
+      nullValue
     }
   }
 
   /** Set the value for a key */
-  def update(k: K, v: V) {
-    if (k == null) {
-      haveNullValue = true
-      nullValue = v
-    } else {
+  def update(k: Row, v: V) {
+    if (k != null) {
       val pos = _keySet.addWithoutResize(k) & MultiColumnOpenHashSet.POSITION_MASK
       _values(pos) = v
       _keySet.rehashIfNeeded(k, grow, move)
       _oldValues = null
+    } else {
+      haveNullValue = true
+      nullValue = v
     }
   }
 
@@ -94,16 +100,8 @@ private[spark] class MultiColumnOpenHashMap[K: ClassTag, @specialized(Long, Int,
    *
    * @return the newly updated value.
    */
-  def changeValue(k: K, defaultValue: => V, mergeValue: (V) => V): V = {
-    if (k == null) {
-      if (haveNullValue) {
-        nullValue = mergeValue(nullValue)
-      } else {
-        haveNullValue = true
-        nullValue = defaultValue
-      }
-      nullValue
-    } else {
+  def changeValue(k: Row, defaultValue: => V, mergeValue: (V) => V): V = {
+    if (k != null) {
       val pos = _keySet.addWithoutResize(k)
       if ((pos & MultiColumnOpenHashSet.NONEXISTENCE_MASK) != 0) {
         val newValue = defaultValue
@@ -114,6 +112,14 @@ private[spark] class MultiColumnOpenHashMap[K: ClassTag, @specialized(Long, Int,
         _values(pos) = mergeValue(_values(pos))
         _values(pos)
       }
+    } else {
+      if (haveNullValue) {
+        nullValue = mergeValue(nullValue)
+      } else {
+        haveNullValue = true
+        nullValue = defaultValue
+      }
+      nullValue
     }
   }
 
@@ -123,7 +129,7 @@ private[spark] class MultiColumnOpenHashMap[K: ClassTag, @specialized(Long, Int,
    *
    * @return the newly updated value.
    */
-  def changeKeyValue(k: K, keyValue: () => (K, V),
+  def changeKeyValue(k: Row, keyValue: () => (Row, V),
                      mergeValue: (V) => Unit): V = {
     if (k != null) {
       val pos = _keySet.addWithoutResize(k)
@@ -150,22 +156,24 @@ private[spark] class MultiColumnOpenHashMap[K: ClassTag, @specialized(Long, Int,
     }
   }
 
-  override def iterator: Iterator[(K, V)] = new Iterator[(K, V)] {
+  override def iterator: Iterator[(Row, V)] = new Iterator[(Row, V)] {
     var pos = -1
-    var nextPair: (K, V) = computeNextPair()
+    var currentKey: SpecificMutableRow = _keySet.newEmptyValueAsRow()
+    var nextPair: (Row, V) = computeNextPair()
 
     /** Get the next value we should return from next(), or null if we're finished iterating */
-    def computeNextPair(): (K, V) = {
+    def computeNextPair(): (Row, V) = {
       if (pos == -1) { // Treat position -1 as looking at the null value
         if (haveNullValue) {
           pos += 1
-          return (null.asInstanceOf[K], nullValue)
+          return (null, nullValue)
         }
         pos += 1
       }
       pos = _keySet.nextPos(pos)
       if (pos >= 0) {
-        val ret = (_keySet.getValue(pos), _values(pos))
+        _keySet.getValueAsRow(pos, currentKey)
+        val ret = (currentKey, _values(pos))
         pos += 1
         ret
       } else {
@@ -175,7 +183,7 @@ private[spark] class MultiColumnOpenHashMap[K: ClassTag, @specialized(Long, Int,
 
     def hasNext: Boolean = nextPair != null
 
-    def next(): (K, V) = {
+    def next(): (Row, V) = {
       val pair = nextPair
       nextPair = computeNextPair()
       pair

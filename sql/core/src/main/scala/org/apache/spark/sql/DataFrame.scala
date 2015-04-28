@@ -682,7 +682,7 @@ class DataFrame private[sql](
    * }}}
    */
   def stratifiedSample(qcs: Array[Int], fraction: Double): DataFrame = {
-    StratifiedSample(qcs, fraction, logicalPlan)
+    StratifiedSample(qcs, fraction, schema, logicalPlan)
   }
 
   /**
@@ -701,7 +701,7 @@ class DataFrame private[sql](
           schema.fieldNames.mkString(", ")})""")
     }
     Sorting.quickSort(colIndexes)
-    StratifiedSample(colIndexes, fraction, logicalPlan)
+    StratifiedSample(colIndexes, fraction, schema, logicalPlan)
   }
 
   /**

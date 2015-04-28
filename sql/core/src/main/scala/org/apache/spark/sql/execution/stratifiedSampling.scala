@@ -1,17 +1,18 @@
 package org.apache.spark.sql.execution
 
+import java.util.ArrayDeque
+import scala.collection.AbstractIterator
+import scala.collection.mutable.PriorityQueue
+import scala.util.hashing.MurmurHash3
 import org.apache.spark.rdd.RDD
 import org.apache.spark.rdd.PartitionwiseSampledRDD
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.expressions.EmptyRow
-import org.apache.spark.util.collection.MultiColumnOpenHashMap
+import org.apache.spark.sql.collection.MultiColumnOpenHashMap
 import org.apache.spark.util.random.RandomSampler
-
-import scala.collection.AbstractIterator
-import scala.collection.mutable.PriorityQueue
-import scala.util.hashing.MurmurHash3
-import java.util.ArrayDeque
+import org.apache.spark.sql.types.DataType
+import org.apache.spark.sql.types.StructType
 
 /**
  * Perform stratified sampling given a Query-Column-Set (QCS). This variant
@@ -19,13 +20,14 @@ import java.util.ArrayDeque
  * since it is eventually designed to be used with streaming data.
  */
 case class StratifiedSample(qcs: Array[Int], fraction: Double,
-                            child: SparkPlan) extends UnaryNode {
+                            tableSchema: StructType, child: SparkPlan)
+    extends UnaryNode {
 
   override def output: Seq[Attribute] = child.output
 
   override def execute(): RDD[Row] = {
     new PartitionwiseSampledRDD[Row, Row](child.execute(),
-      new StratifiedSampler(qcs, fraction), true, 1)
+      new StratifiedSampler(qcs, fraction, tableSchema), true, 1)
   }
 }
 
@@ -58,38 +60,8 @@ final class SingleReusableIterator[A](var elem: A) extends AbstractIterator[A] {
   }
 }
 
-// TODO: optimize by having specialized OpenHashSet/Map impls that take
-// arrays of objects for each column instead of single key array
-/**
- * Encapsulates a set of values for Query Column Set.
- */
-private final class QCSKey(val qcsVal: Array[Any]) {
-
-  override def hashCode = MurmurHash3.arrayHash(qcsVal)
-
-  override def equals(key: Any) = key match {
-    case other: QCSKey => this.qcsVal.sameElements(other.qcsVal)
-    case _             => false
-  }
-
-  final def equals(key: QCSKey) = this.qcsVal.sameElements(key.qcsVal)
-
-  final def shallowClone(row: Row, qcs: Array[Int]): QCSKey = {
-    val qcsLen = qcs.length
-    val nqcsVal = new Array[Any](qcsLen)
-    for (i <- 0 until qcsLen) {
-      nqcsVal(i) = row(qcs(i))
-    }
-    new QCSKey(nqcsVal)
-  }
-}
-
-private object QCSKey {
-  val empty: QCSKey = new QCSKey(null)
-}
-
-// TODO: optimize by having QCSVal as either a single object or array
-// also some specializations for Int/Long, Array[Int]/[Long] will be good
+// TODO: optimize by having metadata as multiple columns like key;
+// add a good sparse array implementation
 /**
  * For each strata (i.e. a unique set of values for QCS), keep a set of
  * meta-data including number of samples collected, total number of rows
@@ -97,17 +69,18 @@ private object QCSKey {
  * in case no new sample is seen for a while etc.
  */
 private final class StrataMetadata(var nSamples: Int, var nTotalSize: Int,
-                                   var weightage: Double, val qcs: QCSKey,
-                                   var pendingRow: Row, var copyAfter: Int,
-                                   var batch: Int, var refreshPending: Int) {
+                                   var weightage: Double, var pendingRow: Row,
+                                   var copyAfter: Int, var batch: Int,
+                                   var refreshPending: Int) {
 }
 
 private object StrataMetadata {
   val empty: StrataMetadata = new StrataMetadata(0, 0, 0.0,
-    QCSKey.empty, EmptyRow, 0, 0, 0)
+    EmptyRow, 0, 0, 0)
 }
 
-final class StratifiedSampler(val qcs: Array[Int], val fraction: Double)
+final class StratifiedSampler(val qcs: Array[Int], val fraction: Double,
+                              val schema: StructType)
     extends RandomSampler[Row, Row] {
 
   /**
@@ -120,7 +93,13 @@ final class StratifiedSampler(val qcs: Array[Int], val fraction: Double)
    * Map of each strata key (i.e. a unique combination of values of columns
    * in qcs) to related metadata
    */
-  private val stratas = new MultiColumnOpenHashMap[QCSKey, StrataMetadata]
+  private val stratas = {
+    val types: Array[DataType] = new Array[DataType](qcs.length)
+    for (i <- 0 until qcs.length) {
+      types(i) = schema(qcs(i)).dataType
+    }
+    new MultiColumnOpenHashMap[StrataMetadata](qcs, types)
+  }
 
   /**
    * A copy of row is made into `StrataMetadata.pendingRow` once every these
@@ -157,29 +136,23 @@ final class StratifiedSampler(val qcs: Array[Int], val fraction: Double)
   override def sample(items: Iterator[Row]): Iterator[Row] = {
     val qcst = this.qcs
     val nQCS = this.qcs.length
-    val qcsKey = new QCSKey(new Array[Any](nQCS))
-    var currentStrata: StrataMetadata = StrataMetadata.empty
+    var currentStrata = StrataMetadata.empty
     var nCurrentBatch = this.batchSize
     val singleIter = new SingleReusableIterator[Row](EmptyRow)
     var forceRefreshCount, batchCount = 0
     var currentMaxSampleCount_1 = 0
 
     items.flatMap(row => {
-      // first extract the qcs columns and populate QCSKey
-      for (i <- 0 until nQCS) {
-        qcsKey.qcsVal(i) = row(qcst(i))
-      }
       var newMd: StrataMetadata = StrataMetadata.empty
-      val currentMd = this.stratas.changeKeyValue(qcsKey,
+      val currentMd = this.stratas.changeKeyValue(row,
         () => {
           // create new strata if required
           val newRow = row.copy
-          val newKey = qcsKey.shallowClone(newRow, qcst)
-          newMd = new StrataMetadata(1, 1, 0.0, newKey, newRow,
+          newMd = new StrataMetadata(1, 1, 0.0, newRow,
             copyFrequency, batchCount, forceRefreshCount)
           // push the new strata at the end into the priority list
           this.strataPriority addLast newMd
-          (newKey, newMd)
+          (newRow, newMd)
         },
         md => {
           // else update meta information in current strata; make a new
@@ -199,8 +172,7 @@ final class StratifiedSampler(val qcs: Array[Int], val fraction: Double)
 
       if (newMd ne StrataMetadata.empty) {
         singleIter += row
-      }
-      // now get the current strata being searched for from the priority queue
+      } // now get the current strata being searched for from the priority queue
       // -ve value in nCurrentBatch indicates that current strata value has
       // already been received and does not need to be done for this batch
       else if (nCurrentBatch < 0) {
@@ -227,7 +199,7 @@ final class StratifiedSampler(val qcs: Array[Int], val fraction: Double)
         }
         // return the value if it matches current strata
         // note that we can do reference comparison of the StrataMetadata
-        // object instead of equals on the qcsKey since the same object
+        // object instead of equals on the key since the same object
         // is both within `stratas` and `strataPriority`
         if (currentMd eq currentStrata) {
           if (nCurrentBatch <= 1) {
@@ -253,8 +225,8 @@ final class StratifiedSampler(val qcs: Array[Int], val fraction: Double)
               true
             }
           if (nCurrentBatch == 0) {
-            // did not find any sample in current strata so lookup pending value
-            val md: StrataMetadata = this.stratas(currentStrata.qcs)
+            // did not find any sample in current strata so use pending value
+            val md = currentStrata
             val pendingRow: Row = md.pendingRow
             val itr: Iterator[Row] =
               if (pendingRow ne EmptyRow) {
@@ -262,10 +234,10 @@ final class StratifiedSampler(val qcs: Array[Int], val fraction: Double)
                 // strata gets copied
                 md.pendingRow = EmptyRow
                 md.copyAfter = 0
-                if (currentMaxSampleCount_1 < currentStrata.nSamples) {
-                  currentMaxSampleCount_1 = currentStrata.nSamples
+                if (currentMaxSampleCount_1 < md.nSamples) {
+                  currentMaxSampleCount_1 = md.nSamples
                 }
-                currentStrata.nSamples += 1
+                md.nSamples += 1
                 if (skipCurrentRow) {
                   singleIter += pendingRow
                 } else {
@@ -276,7 +248,7 @@ final class StratifiedSampler(val qcs: Array[Int], val fraction: Double)
               } else {
                 singleIter += row
               }
-            this.strataPriority addLast currentStrata
+            this.strataPriority addLast md
             currentStrata = StrataMetadata.empty
             nCurrentBatch = this.batchSize
             batchCount += 1
@@ -294,5 +266,6 @@ final class StratifiedSampler(val qcs: Array[Int], val fraction: Double)
     })
   }
 
-  override def clone: StratifiedSampler = new StratifiedSampler(qcs, fraction)
+  override def clone: StratifiedSampler =
+    new StratifiedSampler(qcs, fraction, schema)
 }
