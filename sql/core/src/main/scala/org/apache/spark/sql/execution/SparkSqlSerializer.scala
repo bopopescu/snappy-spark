@@ -21,9 +21,7 @@ import java.nio.ByteBuffer
 import java.util.{HashMap => JavaHashMap}
 
 import org.apache.spark.sql.types.Decimal
-
 import scala.reflect.ClassTag
-
 import com.clearspring.analytics.stream.cardinality.HyperLogLog
 import com.esotericsoftware.kryo.io.{Input, Output}
 import com.esotericsoftware.kryo.{Serializer, Kryo}
@@ -36,6 +34,8 @@ import org.apache.spark.util.collection.OpenHashSet
 import org.apache.spark.util.MutablePair
 
 import org.apache.spark.sql.catalyst.expressions.codegen.{IntegerHashSet, LongHashSet}
+import org.apache.spark.Accumulable
+import org.apache.spark.GrowableAccumulableParam
 
 private[sql] class SparkSqlSerializer(conf: SparkConf) extends KryoSerializer(conf) {
   override def newKryo(): Kryo = {
@@ -56,6 +56,8 @@ private[sql] class SparkSqlSerializer(conf: SparkConf) extends KryoSerializer(co
                   new OpenHashSetSerializer)
     kryo.register(classOf[Decimal])
     kryo.register(classOf[JavaHashMap[_, _]])
+    kryo.register(classOf[Accumulable[_, _]])
+    kryo.register(classOf[GrowableAccumulableParam[_, _]])
 
     kryo.setReferences(false)
     kryo
