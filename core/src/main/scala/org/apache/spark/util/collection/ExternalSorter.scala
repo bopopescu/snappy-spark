@@ -373,9 +373,7 @@ private[spark] class ExternalSorter[K, V, C](
         // spark.shuffle.compress instead of spark.shuffle.spill.compress, so we need to use
         // createTempShuffleBlock here; see SPARK-3426 for more context.
         val (blockId, file) = diskBlockManager.createTempShuffleBlock()
-        val writer = blockManager.getDiskWriter(blockId, file, serInstance, fileBufferSize,
-          curWriteMetrics)
-        writer.open()
+        blockManager.getDiskWriter(blockId, file, serInstance, fileBufferSize, curWriteMetrics)
       }
       // Creating the file to write to and creating a disk writer both involve interacting with
       // the disk, and can take a long time in aggregate when we open many files, so should be
@@ -749,11 +747,16 @@ private[spark] class ExternalSorter[K, V, C](
       val writeStartTime = System.nanoTime
       util.Utils.tryWithSafeFinally {
         for (i <- 0 until numPartitions) {
-          val in = new FileInputStream(partitionWriters(i).fileSegment().file)
-          util.Utils.tryWithSafeFinally {
-            lengths(i) = org.apache.spark.util.Utils.copyStream(in, out, false, transferToEnabled)
-          } {
-            in.close()
+          val file = partitionWriters(i).fileSegment().file
+          if (!file.exists()) {
+            lengths(i) = 0
+          } else {
+            val in = new FileInputStream(file)
+            util.Utils.tryWithSafeFinally {
+              lengths(i) = org.apache.spark.util.Utils.copyStream(in, out, false, transferToEnabled)
+            } {
+              in.close()
+            }
           }
         }
       } {
@@ -798,7 +801,12 @@ private[spark] class ExternalSorter[K, V, C](
     if (writer.isOpen) {
       writer.commitAndClose()
     }
-    blockManager.diskStore.getValues(writer.blockId, ser).get.asInstanceOf[Iterator[Product2[K, C]]]
+    if (writer.fileSegment().length > 0) {
+      blockManager.diskStore.getValues(writer.blockId, ser).get
+        .asInstanceOf[Iterator[Product2[K, C]]]
+    } else {
+      Iterator.empty
+    }
   }
 
   def stop(): Unit = {
