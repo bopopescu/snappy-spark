@@ -106,20 +106,48 @@ private[spark] class DiskBlockManager(blockManager: BlockManager, conf: SparkCon
     getAllFiles().map(f => BlockId(f.getName))
   }
 
+  /**
+   * Generate a random UUID for file names etc. Uses non-secure version
+   * of random number generator to be more efficient given that its not
+   * critical to have this unique.
+   */
+  private def newUnsecureRandomUUID(): UUID = {
+    val randomBytes = new Array[Byte](16)
+    DiskBlockManager.uuidRnd.nextBytes(randomBytes)
+    randomBytes(6) = 0x0f
+    randomBytes(6) = (randomBytes(6) & 0x0f).toByte // clear version
+    randomBytes(6) = (randomBytes(6) | 0x40).toByte // set to version 4
+    randomBytes(8) = (randomBytes(8) & 0x3f).toByte // clear variant
+    randomBytes(8) = (randomBytes(8) | 0x80).toByte // set to IETF variant
+
+    var msb: Long = 0
+    var lsb: Long = 0
+    var i = 0
+    while (i < 8) {
+      msb = (msb << 8) | (randomBytes(i) & 0xff)
+      i += 1
+    }
+    while (i < 16) {
+      lsb = (lsb << 8) | (randomBytes(i) & 0xff)
+      i += 1
+    }
+    new UUID(msb, lsb)
+  }
+
   /** Produces a unique block id and File suitable for storing local intermediate results. */
   def createTempLocalBlock(): (TempLocalBlockId, File) = {
-    var blockId = new TempLocalBlockId(UUID.randomUUID())
+    var blockId = new TempLocalBlockId(newUnsecureRandomUUID())
     while (getFile(blockId).exists()) {
-      blockId = new TempLocalBlockId(UUID.randomUUID())
+      blockId = new TempLocalBlockId(newUnsecureRandomUUID())
     }
     (blockId, getFile(blockId))
   }
 
   /** Produces a unique block id and File suitable for storing shuffled intermediate results. */
   def createTempShuffleBlock(): (TempShuffleBlockId, File) = {
-    var blockId = new TempShuffleBlockId(UUID.randomUUID())
+    var blockId = new TempShuffleBlockId(newUnsecureRandomUUID())
     while (getFile(blockId).exists()) {
-      blockId = new TempShuffleBlockId(UUID.randomUUID())
+      blockId = new TempShuffleBlockId(newUnsecureRandomUUID())
     }
     (blockId, getFile(blockId))
   }
@@ -172,4 +200,9 @@ private[spark] class DiskBlockManager(blockManager: BlockManager, conf: SparkCon
       }
     }
   }
+}
+
+private[spark] object DiskBlockManager {
+  /** static random number generator for UUIDs */
+  private val uuidRnd = new java.util.Random
 }
