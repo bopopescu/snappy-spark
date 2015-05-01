@@ -20,13 +20,13 @@
   <modelVersion>4.0.0</modelVersion>
   <parent>
     <groupId>org.apache.spark</groupId>
-    <artifactId>spark-parent_2.10</artifactId>
-    <version>1.4.0-SNAPSHOT</version>
+    <artifactId>snappy-spark-parent_2.10</artifactId>
+    <version>1.4.0-SNAPSHOT.1</version>
     <relativePath>../pom.xml</relativePath>
   </parent>
 
   <groupId>org.apache.spark</groupId>
-  <artifactId>spark-graphx_2.10</artifactId>
+  <artifactId>snappy-spark-graphx_2.10</artifactId>
   <properties>
     <sbt.project.name>graphx</sbt.project.name>
   </properties>
@@ -37,7 +37,7 @@
   <dependencies>
     <dependency>
       <groupId>org.apache.spark</groupId>
-      <artifactId>spark-core_${scala.binary.version}</artifactId>
+      <artifactId>snappy-spark-core_${scala.binary.version}</artifactId>
       <version>${project.version}</version>
     </dependency>
     <dependency>

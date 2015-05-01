@@ -20,13 +20,13 @@
   <modelVersion>4.0.0</modelVersion>
   <parent>
     <groupId>org.apache.spark</groupId>
-    <artifactId>spark-parent_2.10</artifactId>
-    <version>1.4.0-SNAPSHOT</version>
+    <artifactId>snappy-spark-parent_2.10</artifactId>
+    <version>1.4.0-SNAPSHOT.1</version>
     <relativePath>../pom.xml</relativePath>
   </parent>
 
   <groupId>org.apache.spark</groupId>
-  <artifactId>spark-repl_2.10</artifactId>
+  <artifactId>snappy-spark-repl_2.10</artifactId>
   <packaging>jar</packaging>
   <name>Spark Project REPL</name>
   <url>http://spark.apache.org/</url>
@@ -45,24 +45,24 @@
     </dependency>
     <dependency>
       <groupId>org.apache.spark</groupId>
-      <artifactId>spark-core_${scala.binary.version}</artifactId>
+      <artifactId>snappy-spark-core_${scala.binary.version}</artifactId>
       <version>${project.version}</version>
     </dependency>
     <dependency>
       <groupId>org.apache.spark</groupId>
-      <artifactId>spark-bagel_${scala.binary.version}</artifactId>
-      <version>${project.version}</version>
-      <scope>runtime</scope>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.spark</groupId>
-      <artifactId>spark-mllib_${scala.binary.version}</artifactId>
+      <artifactId>snappy-spark-bagel_${scala.binary.version}</artifactId>
       <version>${project.version}</version>
       <scope>runtime</scope>
     </dependency>
     <dependency>
       <groupId>org.apache.spark</groupId>
-      <artifactId>spark-sql_${scala.binary.version}</artifactId>
+      <artifactId>snappy-spark-mllib_${scala.binary.version}</artifactId>
+      <version>${project.version}</version>
+      <scope>runtime</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.spark</groupId>
+      <artifactId>snappy-spark-sql_${scala.binary.version}</artifactId>
       <version>${project.version}</version>
     </dependency>
     <dependency>

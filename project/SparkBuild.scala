@@ -118,6 +118,9 @@ object SparkBuild extends PomBuild {
   lazy val MavenCompile = config("m2r") extend(Compile)
   lazy val publishLocalBoth = TaskKey[Unit]("publish-local", "publish local for m2 and ivy")
 
+  lazy val snappySnapshotResolver = Resolver.url("Internal Snapshots Repository", url("http://blackbuck.mooo.com:2536/repository/snapshots/"))
+  lazy val snappyReleaseResolver = Resolver.url("Internal Release Repository", url("http://blackbuck.mooo.com:2536/repository/internal/"))
+
   lazy val sharedSettings = graphSettings ++ genjavadocSettings ++ Seq (
     javaHome := sys.env.get("JAVA_HOME")
       .orElse(sys.props.get("java.home").map { p => new File(p).getParentFile().getAbsolutePath() })
@@ -136,6 +139,20 @@ object SparkBuild extends PomBuild {
     publishMavenStyle in MavenCompile := true,
     publishLocal in MavenCompile <<= publishTask(publishLocalConfiguration in MavenCompile, deliverLocal),
     publishLocalBoth <<= Seq(publishLocal in MavenCompile, publishLocal).dependOn,
+
+    resolvers += snappySnapshotResolver,
+    resolvers += snappyReleaseResolver,
+    credentials += Credentials(Path.userHome / ".ivy2" / ".credentials-snaps"),
+    credentials += Credentials(Path.userHome / ".ivy2" / ".credentials-rels"),
+    isSnapshot := version.value.contains("-SNAPSHOT"),
+    publishTo := {
+      if (isSnapshot.value) {
+        Some(snappySnapshotResolver)
+      }
+      else {
+        Some(snappyReleaseResolver)
+      }
+    },
 
     javacOptions in (Compile, doc) ++= {
       val Array(major, minor, _) = System.getProperty("java.version").split("\\.", 3)
@@ -248,10 +265,10 @@ object OldDeps {
     scalaVersion := "2.10.4",
     retrieveManaged := true,
     retrievePattern := "[type]s/[artifact](-[revision])(-[classifier]).[ext]",
-    libraryDependencies := Seq("spark-streaming-mqtt", "spark-streaming-zeromq",
-      "spark-streaming-flume", "spark-streaming-kafka", "spark-streaming-twitter",
-      "spark-streaming", "spark-mllib", "spark-bagel", "spark-graphx",
-      "spark-core").map(versionArtifact(_).get intransitive())
+    libraryDependencies := Seq("snappy-spark-streaming-mqtt", "snappy-spark-streaming-zeromq",
+      "snappy-spark-streaming-flume", "snappy-spark-streaming-kafka", "snappy-spark-streaming-twitter",
+      "snappy-spark-streaming", "snappy-spark-mllib", "snappy-spark-bagel", "snappy-spark-graphx",
+      "snappy-spark-core").map(versionArtifact(_).get intransitive())
   )
 }
 
