@@ -37,7 +37,7 @@ if exist "%SPARK_HOME%\RELEASE" (
   set ASSEMBLY_DIR=%SPARK_HOME%\assembly\target\scala-%SPARK_SCALA_VERSION%
 )
 
-for %%d in (%ASSEMBLY_DIR%\spark-assembly*hadoop*.jar) do (
+for %%d in (%ASSEMBLY_DIR%\snappy-spark-assembly*hadoop*.jar) do (
   set SPARK_ASSEMBLY_JAR=%%d
 )
 if "%SPARK_ASSEMBLY_JAR%"=="0" (

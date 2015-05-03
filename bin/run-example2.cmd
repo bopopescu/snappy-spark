@@ -41,11 +41,11 @@ set EXAMPLES_DIR=%FWDIR%examples
 rem Figure out the JAR file that our examples were packaged into.
 set SPARK_EXAMPLES_JAR=
 if exist "%FWDIR%RELEASE" (
-  for %%d in ("%FWDIR%lib\spark-examples*.jar") do (
+  for %%d in ("%FWDIR%lib\snappy-spark-examples*.jar") do (
     set SPARK_EXAMPLES_JAR=%%d
   )
 ) else (
-  for %%d in ("%EXAMPLES_DIR%\target\scala-%SCALA_VERSION%\spark-examples*.jar") do (
+  for %%d in ("%EXAMPLES_DIR%\target\scala-%SCALA_VERSION%\snappy-spark-examples*.jar") do (
     set SPARK_EXAMPLES_JAR=%%d
   )
 )

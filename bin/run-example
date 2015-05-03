@@ -42,7 +42,7 @@ fi
 
 JAR_COUNT=0
 
-for f in "${JAR_PATH}"/spark-examples-*hadoop*.jar; do
+for f in "${JAR_PATH}"/snappy-spark-examples-*hadoop*.jar; do
   if [[ ! -e "$f" ]]; then
     echo "Failed to find Spark examples assembly in $FWDIR/lib or $FWDIR/examples/target" 1>&2
     echo "You need to build Spark before running this program" 1>&2
