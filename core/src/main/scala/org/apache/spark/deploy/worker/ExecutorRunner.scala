@@ -126,7 +126,10 @@ private[deploy] class ExecutorRunner(
     try {
       // Launch the process
       val builder = CommandUtils.buildProcessBuilder(appDesc.command, memory,
-        sparkHome.getAbsolutePath, substituteVariables)
+        sparkHome.getAbsolutePath, substituteVariables,
+        conf.getExecutorEnv.filter(p => p._1.startsWith("extraClassPath"))
+          .map({case (a, b) => b})
+      )
       val command = builder.command()
       logInfo("Launch command: " + command.mkString("\"", "\" \"", "\""))
 
