@@ -118,8 +118,18 @@ object SparkBuild extends PomBuild {
   lazy val MavenCompile = config("m2r") extend(Compile)
   lazy val publishLocalBoth = TaskKey[Unit]("publish-local", "publish local for m2 and ivy")
 
-  lazy val snappySnapshotResolver = Resolver.url("Internal Snapshots Repository", url("http://blackbuck.mooo.com:2536/repository/snapshots/"))
-  lazy val snappyReleaseResolver = Resolver.url("Internal Release Repository", url("http://blackbuck.mooo.com:2536/repository/internal/"))
+  lazy val snappySnapshotResolver = Resolver.url("Internal Snapshots Repository",
+      url("http://blackbuck.mooo.com:2536/repository/snapshots/"))
+  lazy val snappySnapshotCreds = Credentials(
+      "Repository Archiva Managed snapshots Repository", "blackbuck.mooo.com",
+      sys.env.get("ARCHIVA_USER").orElse(Some("guest")).get,
+      sys.env.get("ARCHIVA_PASS").orElse(Some("guest")).get)
+  lazy val snappyReleaseResolver = Resolver.url("Internal Release Repository",
+      url("http://blackbuck.mooo.com:2536/repository/internal/"))
+  lazy val snappyReleaseCreds = Credentials(
+      "Repository Archiva Managed internal Repository", "blackbuck.mooo.com",
+      sys.env.get("ARCHIVA_USER").orElse(Some("guest")).get,
+      sys.env.get("ARCHIVA_PASS").orElse(Some("guest")).get)
 
   lazy val sharedSettings = graphSettings ++ genjavadocSettings ++ Seq (
     javaHome := sys.env.get("JAVA_HOME")
@@ -142,8 +152,8 @@ object SparkBuild extends PomBuild {
 
     resolvers += snappySnapshotResolver,
     resolvers += snappyReleaseResolver,
-    credentials += Credentials(Path.userHome / ".ivy2" / ".credentials-snaps"),
-    credentials += Credentials(Path.userHome / ".ivy2" / ".credentials-rels"),
+    credentials += snappySnapshotCreds,
+    credentials += snappyReleaseCreds,
     isSnapshot := version.value.contains("-SNAPSHOT"),
     publishTo := {
       if (isSnapshot.value) {
