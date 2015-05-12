@@ -18,7 +18,7 @@
 package org.apache.spark.util.collection
 
 import scala.reflect._
-import com.google.common.hash.Hashing
+import scala.util.hashing.MurmurHash3
 
 /**
  * A simple, fast hash set optimized for non-null insertion-only use case, where keys are never
@@ -254,7 +254,8 @@ class OpenHashSet[@specialized(Long, Int) T: ClassTag](
   /**
    * Re-hash a value to deal better with hash functions that don't differ in the lower bits.
    */
-  private def hashcode(h: Int): Int = Hashing.murmur3_32().hashInt(h).asInt()
+  private def hashcode(h: Int): Int = MurmurHash3.finalizeHash(
+      MurmurHash3.mixLast(MurmurHash3.arraySeed, h), 0)
 
   private def nextPowerOf2(n: Int): Int = {
     val highBit = Integer.highestOneBit(n)
