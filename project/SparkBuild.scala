@@ -34,9 +34,9 @@ object BuildCommons {
 
   val allProjects@Seq(bagel, catalyst, core, graphx, hive, hiveThriftServer, mllib, repl,
     sql, networkCommon, networkShuffle, streaming, streamingFlumeSink, streamingFlume, streamingKafka,
-    streamingMqtt, streamingTwitter, streamingZeromq, launcher, unsafe) =
+    streamingMqtt, streamingTwitter, streamingZeromq, launcher, unsafe, snappy) =
     Seq("bagel", "catalyst", "core", "graphx", "hive", "hive-thriftserver", "mllib", "repl",
-      "sql", "network-common", "network-shuffle", "streaming", "streaming-flume-sink",
+      "sql", "network-common", "network-shuffle", "streaming", "snappy", "streaming-flume-sink",
       "streaming-flume", "streaming-kafka", "streaming-mqtt", "streaming-twitter",
       "streaming-zeromq", "launcher", "unsafe").map(ProjectRef(buildLocation, _))
 
@@ -185,7 +185,7 @@ object SparkBuild extends PomBuild {
 
   // TODO: remove launcher from this list after 1.4.0
   allProjects.filterNot(x => Seq(spark, hive, hiveThriftServer, catalyst, repl,
-    networkCommon, networkShuffle, networkYarn, launcher, unsafe).contains(x)).foreach {
+    networkCommon, networkShuffle, networkYarn, launcher, unsafe, snappy).contains(x)).foreach {
       x => enable(MimaBuild.mimaSettings(sparkHome, x))(x)
     }
 

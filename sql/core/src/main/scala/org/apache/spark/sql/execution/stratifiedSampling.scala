@@ -1,21 +1,17 @@
 package org.apache.spark.sql.execution
 
+import org.apache.spark.Logging
+import org.apache.spark.rdd.{PartitionwiseSampledRDD, RDD}
+import org.apache.spark.sql.{AnalysisException, Row}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, EmptyRow}
+import org.apache.spark.sql.collection.MultiColumnOpenHashMap
+import org.apache.spark.sql.types.{DataType, StructType}
+import org.apache.spark.util.random.{RandomSampler, XORShiftRandom}
+
 import scala.collection.Iterator
 import scala.collection.mutable.OpenHashMap
 import scala.language.reflectiveCalls
 import scala.util.Sorting
-
-import org.apache.spark.rdd.RDD
-import org.apache.spark.rdd.PartitionwiseSampledRDD
-import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.Row
-import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.catalyst.expressions.EmptyRow
-import org.apache.spark.sql.collection.MultiColumnOpenHashMap
-import org.apache.spark.sql.types.DataType
-import org.apache.spark.sql.types.StructType
-import org.apache.spark.util.random.RandomSampler
-import org.apache.spark.util.random.XORShiftRandom
 
 /**
  * Perform stratified sampling given a Query-Column-Set (QCS). This variant
@@ -25,6 +21,8 @@ import org.apache.spark.util.random.XORShiftRandom
 case class StratifiedSample(options: Map[String, Any], tableSchema: StructType,
                             child: SparkPlan)
     extends UnaryNode {
+
+  self =>
 
   override def output: Seq[Attribute] = child.output
 
@@ -176,7 +174,7 @@ object StratifiedSampler {
 
 abstract class StratifiedSampler(val qcs: Array[Int], val cacheSize: Int,
                                  val schema: StructType)
-    extends RandomSampler[Row, Row] {
+  extends RandomSampler[Row, Row] with Logging {
 
   /**
    * Map of each strata key (i.e. a unique combination of values of columns
@@ -203,6 +201,16 @@ abstract class StratifiedSampler(val qcs: Array[Int], val cacheSize: Int,
   }
 
   def append(row: Row): Boolean
+
+  /*
+  private val rddToCounter = new OpenHashMap[Int, Int]
+
+  def roundCounter(rddId: Int) : Int = {
+    val v = rddToCounter.get(rddId)
+    if (v.isDefined)
+      rddToCounter.put(rddId, v.get + 1)
+  }
+  */
 
   def iterator: Iterator[Row] = iterator(nmaxSamples)
 
@@ -406,7 +414,7 @@ final class StratifiedSamplerCached(override val qcs: Array[Int],
     */
 
     items.flatMap(row => {
-      if (!append(row)) {
+      if (append(row)) {
         Iterator.empty
       } else {
         // return current samples and clear for reuse

@@ -17,20 +17,8 @@
 
 package org.apache.spark.launcher;
 
-import java.io.BufferedReader;
-import java.io.File;
-import java.io.FileFilter;
-import java.io.FileInputStream;
-import java.io.InputStreamReader;
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Properties;
-import java.util.jar.JarFile;
+import java.io.*;
+import java.util.*;
 import java.util.regex.Pattern;
 
 import static org.apache.spark.launcher.CommandBuilderUtils.*;
@@ -166,7 +154,7 @@ abstract class AbstractCommandBuilder {
     if (prependClasses || isTesting) {
       String scala = getScalaVersion();
       List<String> projects = Arrays.asList("core", "repl", "mllib", "bagel", "graphx",
-        "streaming", "tools", "sql/catalyst", "sql/core", "sql/hive", "sql/hive-thriftserver",
+        "streaming", "tools", "sql/catalyst", "sql/core", "sql/snappy", "sql/hive", "sql/hive-thriftserver",
         "yarn", "launcher");
       if (prependClasses) {
         System.err.println(
@@ -325,7 +313,7 @@ abstract class AbstractCommandBuilder {
       libdir = new File(sparkHome, String.format("assembly/target/scala-%s", getScalaVersion()));
     }
 
-    final Pattern re = Pattern.compile("spark-assembly.*hadoop.*\\.jar");
+    final Pattern re = Pattern.compile("snappy-spark-assembly.*hadoop.*\\.jar");
     FileFilter filter = new FileFilter() {
       @Override
       public boolean accept(File file) {

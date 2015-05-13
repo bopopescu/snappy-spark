@@ -40,7 +40,7 @@ private[sql] case class CachedData(plan: LogicalPlan, cachedRepresentation: InMe
 private[sql] class CacheManager(sqlContext: SQLContext) extends Logging {
 
   @transient
-  private val cachedData = new scala.collection.mutable.ArrayBuffer[CachedData]
+  private[sql] val cachedData = new scala.collection.mutable.ArrayBuffer[CachedData]
 
   @transient
   private val cacheLock = new ReentrantReadWriteLock
@@ -64,7 +64,7 @@ private[sql] class CacheManager(sqlContext: SQLContext) extends Logging {
   }
 
   /** Acquires a write lock on the cache for the duration of `f`. */
-  private def writeLock[A](f: => A): A = {
+  private[sql] def writeLock[A](f: => A): A = {
     val lock = cacheLock.writeLock()
     lock.lock()
     try f finally {

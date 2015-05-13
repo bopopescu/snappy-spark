@@ -19,21 +19,17 @@ package org.apache.spark.sql.columnar
 
 import java.nio.ByteBuffer
 
-import org.apache.spark.{Accumulable, Accumulator, Accumulators}
-import org.apache.spark.sql.catalyst.expressions
-
-import scala.collection.mutable.ArrayBuffer
-import scala.collection.mutable.HashMap
-
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.Row
-import org.apache.spark.SparkContext
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Statistics}
 import org.apache.spark.sql.execution.{LeafNode, SparkPlan}
 import org.apache.spark.storage.StorageLevel
+import org.apache.spark.{Accumulable, Accumulator, Accumulators}
+
+import scala.collection.mutable.ArrayBuffer
 
 private[sql] object InMemoryRelation {
   def apply(
@@ -59,7 +55,7 @@ private[sql] case class InMemoryRelation(
     private var _batchStats: Accumulable[ArrayBuffer[Row], Row] = null)
   extends LogicalPlan with MultiInstanceRelation {
 
-  private val batchStats: Accumulable[ArrayBuffer[Row], Row] =
+  private[sql] val batchStats: Accumulable[ArrayBuffer[Row], Row] =
     if (_batchStats == null) {
       child.sqlContext.sparkContext.accumulableCollection(ArrayBuffer.empty[Row])
     } else {
@@ -80,7 +76,7 @@ private[sql] case class InMemoryRelation(
   // Statistics propagation contracts:
   // 1. Non-null `_statistics` must reflect the actual statistics of the underlying data
   // 2. Only propagate statistics when `_statistics` is non-null
-  private def statisticsToBePropagated = if (_statistics == null) {
+  private[sql] def statisticsToBePropagated = if (_statistics == null) {
     val updatedStats = statistics
     if (_statistics == null) null else updatedStats
   } else {

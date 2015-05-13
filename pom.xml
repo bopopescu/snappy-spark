@@ -98,6 +98,7 @@
     <module>sql/core</module>
     <module>sql/hive</module>
     <module>unsafe</module>
+    <module>sql/snappy</module>
     <module>assembly</module>
     <module>external/twitter</module>
     <module>external/flume</module>
@@ -1764,6 +1765,9 @@
     </profile>
     <profile>
       <id>hive-0.13.1</id>
+      <activation>
+        <property><name>intellij</name></property>
+      </activation>
       <properties>
         <hive.version>0.13.1a</hive.version>
         <hive.version.short>0.13.1</hive.version.short>

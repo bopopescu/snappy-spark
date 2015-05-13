@@ -886,7 +886,7 @@ private[spark] object SparkSubmitUtils {
     // other spark-streaming utility components. Underscore is there to differentiate between
     // spark-streaming_2.1x and spark-streaming-kafka-assembly_2.1x
     val components = Seq("bagel_", "catalyst_", "core_", "graphx_", "hive_", "mllib_", "repl_",
-      "sql_", "streaming_", "yarn_", "network-common_", "network-shuffle_", "network-yarn_")
+      "sql_", "streaming_", "yarn_", "network-common_", "network-shuffle_", "network-yarn_", "snappydata_")
 
     components.foreach { comp =>
       val sparkArtifacts =
