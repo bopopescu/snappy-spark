@@ -1,7 +1,7 @@
 package org.apache.spark.sql.execution
 
 import java.util.ArrayDeque
-import scala.collection.AbstractIterator
+import scala.collection.Iterator
 import scala.collection.mutable.PriorityQueue
 import scala.util.hashing.MurmurHash3
 import org.apache.spark.rdd.RDD
@@ -39,7 +39,7 @@ case class StratifiedSample(qcs: Array[Int], fraction: Double,
  *
  * @return An iterator which has only a single item `elem`
  */
-final class SingleReusableIterator[A](var elem: A) extends AbstractIterator[A] {
+final class SingleReusableIterator[A](var elem: A) extends Iterator[A] {
 
   private var hasnext = true
 

@@ -313,11 +313,11 @@ private[spark] object MultiColumnOpenHashSet {
     def copyValue(data: Array[Any], pos: Int, newData: Array[Any],
                   newPos: Int): Unit
 
-    final def hashInt(i: Int) = {
+    final def hashInt(i: Int): Int = {
       MurmurHash3.finalizeHash(MurmurHash3.mixLast(
         MurmurHash3.arraySeed, i), 0)
     }
-    final def hashLong(l: Long) = {
+    final def hashLong(l: Long): Int = {
       MurmurHash3.finalizeHash(MurmurHash3.mixLast(MurmurHash3.mix(
         MurmurHash3.arraySeed, l.toInt), (l >>> 32).toInt), 0)
     }
