@@ -5,10 +5,8 @@ export MAVEN_OPTS
 
 BUILDER="build/sbt"
 SCALA="scala-2.11"
-if [ -z "$1" ]; then
-  ARGS="assembly"
-else
-  ARGS=
+ARGS=
+if [ -n "$1" ]; then
   EXPLICIT_SCALA=
   for arg in "$@"; do
     case "${arg}" in
@@ -32,4 +30,8 @@ else
   fi
 fi
 
-eval ${BUILDER} -Pyarn -Phadoop-2.4 -Dhadoop.version=2.4.1 -Phive -Phive-thriftserver -DskipTests -D${SCALA} ${ARGS}
+if [ -z "${ARGS}" ]; then
+  ${BUILDER} -Pyarn -Phadoop-2.4 -Dhadoop.version=2.4.1 -Phive -Phive-thriftserver -DskipTests -D${SCALA}
+else
+  eval ${BUILDER} -Pyarn -Phadoop-2.4 -Dhadoop.version=2.4.1 -Phive -Phive-thriftserver -DskipTests -D${SCALA} ${ARGS}
+fi
