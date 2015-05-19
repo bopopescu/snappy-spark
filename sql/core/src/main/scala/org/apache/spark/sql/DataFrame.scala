@@ -726,40 +726,11 @@ class DataFrame private[sql](
   /**
    * Creates stratified sampled data from given DataFrame
    * {{{
-   *   peopleDf.stratifiedSample(Array(1,2), 0.01)
+   *   peopleDf.stratifiedSample(Map("qcs" -> Array(1,2), "fraction" -> 0.01))
    * }}}
    */
-  def stratifiedSample(qcs: Array[Int], fraction: Double): DataFrame = {
-    StratifiedSample(qcs, fraction, schema, logicalPlan)
-  }
-
-  /**
-   * Creates stratified sampled data from given DataFrame
-   * {{{
-   *   peopleDf.stratifiedSample(Array("c1","c2"), 0.01)
-   * }}}
-   */
-  def stratifiedSample(qcs: Array[String], fraction: Double): DataFrame = {
-    val cols = columns
-    val colIndexes = qcs.map { col: String =>
-      val colIndex = cols.indexOf(col)
-      if (colIndex >= 0) colIndex
-      else throw new AnalysisException(
-        s"""Cannot resolve column name "$col" among (${
-          schema.fieldNames.mkString(", ")})""")
-    }
-    Sorting.quickSort(colIndexes)
-    StratifiedSample(colIndexes, fraction, schema, logicalPlan)
-  }
-
-  /**
-   * Creates stratified sampled data from given DataFrame
-   * {{{
-   *   peopleDf.stratifiedSample("c1,c2", 0.01)
-   * }}}
-   */
-  def stratifiedSample(qcs: String, fraction: Double): DataFrame = {
-    stratifiedSample(qcs.split(","), fraction)
+  def stratifiedSample(options: Map[String, Any]): DataFrame = {
+    StratifiedSample(options, schema, logicalPlan)
   }
 
   /**

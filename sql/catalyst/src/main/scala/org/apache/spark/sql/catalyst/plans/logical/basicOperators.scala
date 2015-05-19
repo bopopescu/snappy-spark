@@ -306,9 +306,8 @@ case class Sample(fraction: Double, withReplacement: Boolean, seed: Long, child:
   override def output: Seq[Attribute] = child.output
 }
 
-case class StratifiedSample(qcs: Array[Int], fraction: Double,
-                            tableSchema: StructType, child: LogicalPlan)
-    extends UnaryNode {
+case class StratifiedSample(options: Map[String, Any], tableSchema: StructType,
+                            child: LogicalPlan) extends UnaryNode {
 
   override def output: Seq[Attribute] = child.output
 }

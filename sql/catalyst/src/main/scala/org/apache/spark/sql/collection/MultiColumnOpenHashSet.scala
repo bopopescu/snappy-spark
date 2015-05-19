@@ -549,7 +549,7 @@ private[spark] object MultiColumnOpenHashSet {
       hashInt(data(0).asInstanceOf[Array[Any]](pos).##)
 
     override def equals(data: Array[Any], pos: Int, row: Row): Boolean =
-      data(0).asInstanceOf[Array[Any]](pos) == row(col)
+      data(0).asInstanceOf[Array[Any]](pos).equals(row(col))
 
     override def newMutableRow(): SpecificMutableRow =
       new SpecificMutableRow(Array[MutableValue](new MutableAny))
@@ -624,8 +624,8 @@ private[spark] object MultiColumnOpenHashSet {
 
     override def hash(data: Array[Any], pos: Int): Int = {
       val ncols = this.ncols
-      var h = MurmurHash3.arraySeed
       val types = this.types
+      var h = MurmurHash3.arraySeed
       var i = 0
       while (i < ncols) {
         types(i) match {
@@ -685,7 +685,7 @@ private[spark] object MultiColumnOpenHashSet {
             if (data(i).asInstanceOf[Array[Short]](pos) != row.getShort(cols(i)))
               return false
           case _ =>
-            if (data(i).asInstanceOf[Array[Any]](pos) != row(cols(i)))
+            if (!data(i).asInstanceOf[Array[Any]](pos).equals(row(cols(i))))
               return false
         }
         i += 1

@@ -1,9 +1,6 @@
 package org.apache.spark.sql.execution
 
-import java.util.ArrayDeque
 import scala.collection.Iterator
-import scala.collection.mutable.PriorityQueue
-import scala.util.hashing.MurmurHash3
 import org.apache.spark.rdd.RDD
 import org.apache.spark.rdd.PartitionwiseSampledRDD
 import org.apache.spark.sql.Row
@@ -13,259 +10,385 @@ import org.apache.spark.sql.collection.MultiColumnOpenHashMap
 import org.apache.spark.util.random.RandomSampler
 import org.apache.spark.sql.types.DataType
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.util.random.XORShiftRandom
+import org.apache.spark.sql.AnalysisException
+import scala.util.Sorting
 
 /**
  * Perform stratified sampling given a Query-Column-Set (QCS). This variant
- * uses a fixed fraction to be sampled instead of fixed number of total samples
- * since it is eventually designed to be used with streaming data.
+ * can also use a fixed fraction to be sampled instead of fixed number of
+ * total samples since it is eventually designed to be used with streaming data.
  */
-case class StratifiedSample(qcs: Array[Int], fraction: Double,
-                            tableSchema: StructType, child: SparkPlan)
+case class StratifiedSample(options: Map[String, Any], tableSchema: StructType,
+                            child: SparkPlan)
     extends UnaryNode {
 
   override def output: Seq[Attribute] = child.output
 
   override def execute(): RDD[Row] = {
     new PartitionwiseSampledRDD[Row, Row](child.execute(),
-      new StratifiedSampler(qcs, fraction, tableSchema), true, 1)
+      StratifiedSampler.newSampler(options, tableSchema), true)
   }
 }
 
-/**
- * Creates a reusable iterator which produces a single element. Provides a
- * `+=` method to fill in a new element and reuse the iterator afresh.
- *
- * @param elem the element
- *
- * @return An iterator which has only a single item `elem`
- */
-final class SingleReusableIterator[A](var elem: A) extends Iterator[A] {
+abstract class StratifiedSampler(val qcs: Array[Int], val schema: StructType)
+    extends RandomSampler[Row, Row] {
 
-  private var hasnext = true
+  /**
+   * Map of each strata key (i.e. a unique combination of values of columns
+   * in qcs) to related metadata and reservoir
+   */
+  protected final val stratas = {
+    val types: Array[DataType] = new Array[DataType](qcs.length)
+    for (i <- 0 until qcs.length) {
+      types(i) = schema(qcs(i)).dataType
+    }
+    new MultiColumnOpenHashMap[StrataReservoir](qcs, types)
+  }
 
-  override def hasNext: Boolean = this.hasnext
+  /**
+   * Random number generator for sampling.
+   */
+  protected final val rng = new XORShiftRandom
 
-  override def next(): A =
-    if (this.hasnext) {
-      this.hasnext = false;
-      this.elem
-    } else {
-      Iterator.empty.next()
+  override def setSeed(seed: Long) {
+    rng.setSeed(seed)
+  }
+
+  def iterator = StrataReservoir.mapIterator(stratas, 0, 0)
+}
+
+object StratifiedSampler {
+
+  def qcsOf(qa: Array[String], schema: StructType) = {
+    val cols = schema.fieldNames
+    val colIndexes = qa.map { col: String =>
+      val colIndex = cols.indexOf(col.trim)
+      if (colIndex >= 0) colIndex
+      else throw new AnalysisException(
+        s"""StratifiedSampler: Cannot resolve column name "$col" among
+            (${schema.fieldNames.mkString(", ")})""")
+    }
+    Sorting.quickSort(colIndexes)
+    colIndexes
+  }
+
+  def newSampler(options: Map[String, Any], schema: StructType) = {
+    val defOpts = (null.asInstanceOf[Array[Int]], 0.0, 0)
+    // Using foldLeft to read key-value pairs and build into the result
+    // tuple of (qcs, fraction, cacheSize) like an aggregate.
+    // This "aggregate" simply keeps the last values for the corresponding
+    // keys as found when folding the map.
+    val (qcs, fraction, cacheSize) = options.foldLeft(defOpts) {
+      case ((cols, frac, sz), (opt, optV)) => {
+        opt match {
+          case "qcs" => optV match {
+            case qi: Array[Int]    => (qi, frac, sz)
+            case qa: Array[String] => (qcsOf(qa, schema), frac, sz)
+            case qs: String        => (qcsOf(qs.split(","), schema), frac, sz)
+            case _ => throw new AnalysisException(
+              s"""StratifiedSampler: Cannot parse 'qcs'="$optV" among
+                  (${schema.fieldNames.mkString(", ")})""")
+          }
+          case "fraction" => optV match {
+            case fd: Double => (cols, fd, sz)
+            case ff: Float  => (cols, ff.toDouble, sz)
+            case fi: Int    => (cols, fi.toDouble, sz)
+            case fl: Long   => (cols, fl.toDouble, sz)
+            case fs: String => (cols, fs.toDouble, sz)
+            case _ => throw new AnalysisException(
+              s"""StratifiedSampler: Cannot parse double 'fraction'=$optV""")
+          }
+          case "cacheSize" | "reservoirSize" => optV match {
+            case si: Int    => (cols, frac, si)
+            case sl: Long   => (cols, frac, sl.toInt)
+            case ss: String => (cols, frac, ss.toInt)
+            case _ => throw new AnalysisException(
+              s"""StratifiedSampler: Cannot parse int 'cacheSize'=$optV""")
+          }
+          case _ => throw new AnalysisException(
+            s"""StratifiedSampler: Unknown option "$opt"""")
+        }
+      }
     }
 
-  def +=(e: A): SingleReusableIterator[A] = {
-    this.elem = e
-    this.hasnext = true
-    this
+    if (qcs == null)
+      throw new AnalysisException("StratifiedSampler: QCS is null")
+    else if (fraction > 0.0)
+      new StratifiedSamplerCached(qcs, schema, fraction, cacheSize)
+    else if (cacheSize > 0)
+      new StratifiedSamplerFullReservoir(qcs, schema, cacheSize)
+    else throw new AnalysisException(
+      s"""StratifiedSampler: 'fraction'=$fraction 'cacheSize'=$cacheSize""")
   }
 }
 
 // TODO: optimize by having metadata as multiple columns like key;
 // add a good sparse array implementation
+
 /**
  * For each strata (i.e. a unique set of values for QCS), keep a set of
  * meta-data including number of samples collected, total number of rows
- * in the strata seen so far, the QCS key, a cached recent sample to use
- * in case no new sample is seen for a while etc.
+ * in the strata seen so far, the QCS key, reservoir of samples etc.
  */
-private final class StrataMetadata(var nSamples: Int, var nTotalSize: Int,
-                                   var weightage: Double, var pendingRow: Row,
-                                   var copyAfter: Int, var batch: Int,
-                                   var refreshPending: Int) {
+final class StrataReservoir(var nsamples: Int, var ntotalSize: Int,
+                            var weightage: Double, var reservoir: Array[Row],
+                            var reservoirSize: Int, var batchTotalSize: Int,
+                            var prevShortFall: Int) {
 }
 
-private object StrataMetadata {
-  val empty: StrataMetadata = new StrataMetadata(0, 0, 0.0,
-    EmptyRow, 0, 0, 0)
-}
+private object StrataReservoir {
 
-final class StratifiedSampler(val qcs: Array[Int], val fraction: Double,
-                              val schema: StructType)
-    extends RandomSampler[Row, Row] {
+  def mapIterator(stratas: MultiColumnOpenHashMap[StrataReservoir],
+                  cacheSize: Int, maxSamples: Int) = {
+    stratas.valuesIterator.flatMap(sr => new Iterator[Row] {
 
-  /**
-   * This is the size of single batch out of which a single sample for
-   * "most wanted" strata will be picked.
-   */
-  private val batchSize = (1.0 / this.fraction).toInt
+      val reservoir = sr.reservoir
+      val nsamples = sr.reservoirSize
+      var pos = 0
 
-  /**
-   * Map of each strata key (i.e. a unique combination of values of columns
-   * in qcs) to related metadata
-   */
-  private val stratas = {
-    val types: Array[DataType] = new Array[DataType](qcs.length)
-    for (i <- 0 until qcs.length) {
-      types(i) = schema(qcs(i)).dataType
-    }
-    new MultiColumnOpenHashMap[StrataMetadata](qcs, types)
-  }
+      override def hasNext: Boolean = {
+        if (pos < nsamples) {
+          return true
+        } else if (cacheSize > 0) {
+          // reset transient data
 
-  /**
-   * A copy of row is made into `StrataMetadata.pendingRow` once every these
-   * many times for use later in case no row for the current strata is found
-   * in current batch.
-   */
-  private val copyFrequency = 50
-
-  /**
-   * A copy of row is forced after having traversed these many batches
-   * to not hold on to very old rows in `StrataMetadata.pendingRow` for
-   * strata that have very low frequency and `copyFrequency` may be too
-   * large and thus inappropriate.
-   */
-  private val pendingRefreshBatch = 10
-
-  /**
-   * A queue of stratas ordered by number of samples seen so far which
-   * helps determine the next strata for which a sample needs to be returned.
-   */
-  private val strataPriority = new ArrayDeque[StrataMetadata]
-  /*
-  private val strataPriority = new PriorityQueue[StrataMetadata]()(
-    new Ordering[StrataMetadata] {
-      override def compare(a: StrataMetadata, b: StrataMetadata) =
-        Integer.compare(a.nSamples, b.nSamples)
-    })
-  */
-
-  override def setSeed(seed: Long) {
-    // nothing to be done for seed
-  }
-
-  override def sample(items: Iterator[Row]): Iterator[Row] = {
-    val qcst = this.qcs
-    val nQCS = this.qcs.length
-    var currentStrata = StrataMetadata.empty
-    var nCurrentBatch = this.batchSize
-    val singleIter = new SingleReusableIterator[Row](EmptyRow)
-    var forceRefreshCount, batchCount = 0
-    var currentMaxSampleCount_1 = 0
-
-    items.flatMap(row => {
-      var newMd: StrataMetadata = StrataMetadata.empty
-      val currentMd = this.stratas.changeKeyValue(row,
-        () => {
-          // create new strata if required
-          val newRow = row.copy
-          newMd = new StrataMetadata(1, 1, 0.0, newRow,
-            copyFrequency, batchCount, forceRefreshCount)
-          // push the new strata at the end into the priority list
-          this.strataPriority addLast newMd
-          (newRow, newMd)
-        },
-        md => {
-          // else update meta information in current strata; make a new
-          // copy of pendingRow to use in case we do not find value of
-          // this strata later when required
-          md.nTotalSize += 1
-          // avoid making a copy of Row everytime to displace older one
-          // and instead do it only once every 'copyFrequency' times
-          if (md.copyAfter != 0 && md.refreshPending == forceRefreshCount) {
-            md.copyAfter -= 1
+          // first update the shortfall for next round
+          sr.prevShortFall = math.max(0, maxSamples - sr.nsamples)
+          // shrink reservoir back to cacheSize if required to avoid
+          // growing possibly without bound (in case some strata consistently
+          //   gets small number of total rows less than sample size)
+          if (reservoir.length == cacheSize) {
+            0 until nsamples foreach { i => reservoir(i) = EmptyRow }
           } else {
-            md.pendingRow = row.copy
-            md.copyAfter = copyFrequency
-            md.refreshPending = forceRefreshCount
+            sr.reservoir = new Array[Row](cacheSize)
           }
-        })
-
-      if (newMd ne StrataMetadata.empty) {
-        singleIter += row
-      } // now get the current strata being searched for from the priority queue
-      // -ve value in nCurrentBatch indicates that current strata value has
-      // already been received and does not need to be done for this batch
-      else if (nCurrentBatch < 0) {
-        nCurrentBatch += 1
-        if (nCurrentBatch == 0) {
-          currentStrata = StrataMetadata.empty
-          nCurrentBatch = this.batchSize
-          batchCount += 1
-          if ((batchCount % this.pendingRefreshBatch) == 0) {
-            forceRefreshCount += 1
-          }
-        }
-        if (currentMd.nSamples < currentMaxSampleCount_1
-          && currentMd.batch != batchCount) {
-          currentMd.nSamples += 1
-          currentMd.batch = batchCount
-          singleIter += row
+          sr.reservoirSize = 0
+          sr.batchTotalSize = 0
+          false
         } else {
-          Iterator.empty
+          false
         }
-      } else {
-        if (currentStrata eq StrataMetadata.empty) {
-          currentStrata = this.strataPriority.removeLast
-        }
-        // return the value if it matches current strata
-        // note that we can do reference comparison of the StrataMetadata
-        // object instead of equals on the key since the same object
-        // is both within `stratas` and `strataPriority`
-        if (currentMd eq currentStrata) {
-          if (nCurrentBatch <= 1) {
-            nCurrentBatch = this.batchSize
-          } else {
-            nCurrentBatch = -nCurrentBatch + 1
-          }
-          if (currentMaxSampleCount_1 < currentStrata.nSamples) {
-            currentMaxSampleCount_1 = currentStrata.nSamples
-          }
-          currentStrata.nSamples += 1
-          this.strataPriority addLast currentStrata
-          singleIter += row
-        } else {
-          nCurrentBatch -= 1
-          val skipCurrentRow =
-            if (currentMd.nSamples < currentMaxSampleCount_1
-              && currentMd.batch != batchCount) {
-              currentMd.nSamples += 1
-              currentMd.batch = batchCount
-              false
-            } else {
-              true
-            }
-          if (nCurrentBatch == 0) {
-            // did not find any sample in current strata so use pending value
-            val md = currentStrata
-            val pendingRow: Row = md.pendingRow
-            val itr: Iterator[Row] =
-              if (pendingRow ne EmptyRow) {
-                // reset stored row and copy frequency so next row in the
-                // strata gets copied
-                md.pendingRow = EmptyRow
-                md.copyAfter = 0
-                if (currentMaxSampleCount_1 < md.nSamples) {
-                  currentMaxSampleCount_1 = md.nSamples
-                }
-                md.nSamples += 1
-                if (skipCurrentRow) {
-                  singleIter += pendingRow
-                } else {
-                  Iterator(row, pendingRow)
-                }
-              } else if (skipCurrentRow) {
-                Iterator.empty
-              } else {
-                singleIter += row
-              }
-            this.strataPriority addLast md
-            currentStrata = StrataMetadata.empty
-            nCurrentBatch = this.batchSize
-            batchCount += 1
-            if ((batchCount % this.pendingRefreshBatch) == 0) {
-              forceRefreshCount += 1
-            }
-            itr
-          } else if (skipCurrentRow) {
-            Iterator.empty
-          } else {
-            singleIter += row
-          }
-        }
+      }
+
+      override def next() = {
+        val v = reservoir(pos)
+        pos += 1
+        v
       }
     })
   }
+}
 
-  override def clone: StratifiedSampler =
-    new StratifiedSampler(qcs, fraction, schema)
+final class StratifiedSamplerCached(override val qcs: Array[Int],
+                                    override val schema: StructType,
+                                    val fraction: Double, val cacheSize: Int)
+    extends StratifiedSampler(qcs, schema) {
+
+  override def sample(items: Iterator[Row]): Iterator[Row] = {
+    // "purely non-functional" code below but more efficient
+    /*
+    new Iterator[Row] {
+      val rng = StratifiedSampler.this.rng
+      val stratas = StratifiedSampler.this.stratas
+      val fraction = StratifiedSampler.this.fraction
+      val cacheSize = StratifiedSampler.this.cacheSize
+      var nbatchSamples, slotSize, nmaxSamples = 0
+
+      var hasItems = items.hasNext
+      var mapIterator: Iterator[Row] = Iterator.empty
+
+      override def hasNext: Boolean = {
+        if (mapIterator.hasNext) {
+          return true
+        }
+        while (hasItems) {
+          val row = items.next
+          hasItems = items.hasNext
+          stratas.changeKeyValue(row,
+            () => {
+              // create new strata
+              val newRow = row.copy
+              val reservoir = new Array[Row](cacheSize)
+              reservoir(0) = newRow
+              val sr = new StrataReservoir(1, 1, 0.0, reservoir,
+                1, 1, math.max(0, nmaxSamples - cacheSize))
+              if (nmaxSamples == 0) {
+                nmaxSamples = 1
+              }
+              nbatchSamples += 1
+              (newRow, sr)
+            },
+            sr => {
+              // else update meta information in current strata
+              sr.ntotalSize += 1
+              sr.batchTotalSize += 1
+              val reservoirCapacity = cacheSize + sr.prevShortFall
+              if (sr.reservoirSize >= reservoirCapacity) {
+                val rnd = rng.nextInt(sr.batchTotalSize)
+                // pick up this row with probability of reservoirSize/capacity
+                if (rnd < reservoirCapacity) {
+                  // replace a random row in reservoir
+                  sr.reservoir(rng.nextInt(reservoirCapacity)) = row.copy
+                }
+              } else {
+                // if reservoir has empty slots then fill them up first
+                val reservoirLen = sr.reservoir.length
+                if (reservoirLen <= sr.reservoirSize) {
+                  val newReservoir = new Array[Row](math.min(reservoirCapacity,
+                    reservoirLen + (reservoirLen >>> 1) + 1))
+                  System.arraycopy(sr.reservoir, 0, newReservoir,
+                      0, reservoirLen)
+                  sr.reservoir = newReservoir
+                }
+                sr.reservoir(sr.reservoirSize) = row.copy
+                sr.reservoirSize += 1
+                sr.nsamples += 1
+                if (sr.nsamples > nmaxSamples) {
+                  nmaxSamples = sr.nsamples
+                }
+                nbatchSamples += 1
+              }
+            })
+
+          slotSize += 1
+          // now check if we need to end the slot and return current samples
+          if (nbatchSamples > (fraction * slotSize)) {
+            // if we reached end of source, then initialize the iterator
+            // for any remaining cached samples
+            if (!hasItems) {
+              mapIterator = StrataReservoir.mapIterator(stratas,
+                cacheSize, nmaxSamples)
+            }
+          } else {
+            // reset batch counters
+            nbatchSamples = 0
+            slotSize = 0
+            // return current samples and clear for reuse
+            mapIterator = StrataReservoir.mapIterator(stratas,
+                cacheSize, nmaxSamples)
+            if (mapIterator.hasNext) return true
+          }
+        }
+        return mapIterator.hasNext
+      }
+
+      override def next() = {
+        mapIterator.next
+      }
+    }
+    */
+
+    val rng = this.rng
+    val stratas = this.stratas
+    val fraction = this.fraction
+    val cacheSize = this.cacheSize
+    var nbatchSamples, slotSize, nmaxSamples = 0
+
+    items.flatMap(row => {
+      stratas.changeKeyValue(row,
+        () => {
+          // create new strata
+          val newRow = row.copy
+          val reservoir = new Array[Row](cacheSize)
+          reservoir(0) = newRow
+          val sr = new StrataReservoir(1, 1, 0.0, reservoir,
+            1, 1, math.max(0, nmaxSamples - cacheSize))
+          if (nmaxSamples == 0) {
+            nmaxSamples = 1
+          }
+          nbatchSamples += 1
+          (newRow, sr)
+        },
+        sr => {
+          // else update meta information in current strata
+          sr.ntotalSize += 1
+          sr.batchTotalSize += 1
+          val reservoirCapacity = cacheSize + sr.prevShortFall
+          if (sr.reservoirSize >= reservoirCapacity) {
+            val rnd = rng.nextInt(sr.batchTotalSize)
+            // pick up this row with probability of reservoirSize/capacity
+            if (rnd < reservoirCapacity) {
+              // replace a random row in reservoir
+              sr.reservoir(rng.nextInt(reservoirCapacity)) = row.copy
+            }
+          } else {
+            // if reservoir has empty slots then fill them up first
+            val reservoirLen = sr.reservoir.length
+            if (reservoirLen <= sr.reservoirSize) {
+              val newReservoir = new Array[Row](math.min(reservoirCapacity,
+                reservoirLen + (reservoirLen >>> 1) + 1))
+              System.arraycopy(sr.reservoir, 0, newReservoir, 0, reservoirLen)
+              sr.reservoir = newReservoir
+            }
+            sr.reservoir(sr.reservoirSize) = row.copy
+            sr.reservoirSize += 1
+            sr.nsamples += 1
+            if (sr.nsamples > nmaxSamples) {
+              nmaxSamples = sr.nsamples
+            }
+            nbatchSamples += 1
+          }
+        })
+
+      slotSize += 1
+      if (nbatchSamples > (fraction * slotSize)) {
+        Iterator.empty
+      } else {
+        // reset batch counters
+        nbatchSamples = 0
+        slotSize = 0
+        // return current samples and clear for reuse
+        StrataReservoir.mapIterator(stratas, cacheSize, nmaxSamples)
+      }
+    }) ++ StrataReservoir.mapIterator(stratas, 0, 0)
+  }
+
+  override def clone: StratifiedSamplerCached =
+    new StratifiedSamplerCached(qcs, schema, fraction, cacheSize)
+}
+
+final class StratifiedSamplerFullReservoir(override val qcs: Array[Int],
+                                           override val schema: StructType,
+                                           val strataSize: Int)
+    extends StratifiedSampler(qcs, schema) {
+
+  override def sample(items: Iterator[Row]): Iterator[Row] = {
+    val rng = this.rng
+    val strataSize = this.strataSize
+
+    items.foreach(row => {
+      this.stratas.changeKeyValue(row,
+        () => {
+          // create new strata if required
+          val newRow = row.copy
+          val reservoir = new Array[Row](strataSize)
+          reservoir(0) = newRow
+          val sr = new StrataReservoir(1, 1, 0.0, reservoir, 1, 1, 0)
+          (newRow, sr)
+        },
+        sr => {
+          // else update meta information in current strata
+          sr.ntotalSize += 1
+          if (sr.reservoirSize >= strataSize) {
+            // copy into the reservoir as per probability (strataSize/totalSize)
+            val rnd = rng.nextInt(sr.ntotalSize)
+            if (rnd < strataSize) {
+              // pick up this row and replace a random one from reservoir
+              sr.reservoir(rng.nextInt(strataSize)) = row.copy
+            }
+          } else {
+            // always copy into the reservoir for this case
+            sr.reservoir(sr.reservoirSize) = row.copy
+            sr.reservoirSize += 1
+          }
+        })
+    })
+
+    // finally iterate over all the strata reservoirs
+    StrataReservoir.mapIterator(this.stratas, 0, 0)
+  }
+
+  override def clone: StratifiedSamplerFullReservoir =
+    new StratifiedSamplerFullReservoir(qcs, schema, strataSize)
 }

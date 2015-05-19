@@ -161,7 +161,10 @@ private[spark] class MultiColumnOpenHashMap[@specialized(Long, Int, Double) V: C
     var currentKey: SpecificMutableRow = _keySet.newEmptyValueAsRow()
     var nextPair: (Row, V) = computeNextPair()
 
-    /** Get the next value we should return from next(), or null if we're finished iterating */
+    /**
+     * Get the next value we should return from next(),
+     * or null if we're finished iterating
+     */
     def computeNextPair(): (Row, V) = {
       if (pos == -1) { // Treat position -1 as looking at the null value
         if (haveNullValue) {
@@ -181,12 +184,46 @@ private[spark] class MultiColumnOpenHashMap[@specialized(Long, Int, Double) V: C
       }
     }
 
-    def hasNext: Boolean = nextPair != null
+    override def hasNext: Boolean = nextPair != null
 
-    def next(): (Row, V) = {
+    override def next(): (Row, V) = {
       val pair = nextPair
       nextPair = computeNextPair()
       pair
+    }
+  }
+
+  final def valuesIterator: Iterator[V] = new Iterator[V] {
+    var pos = -1
+    var nextV: V = computeNextV()
+
+    /**
+     * Get the next value we should return from next(),
+     * or null if we're finished iterating
+     */
+    def computeNextV(): V = {
+      if (pos == -1) { // Treat position -1 as looking at the null value
+        if (haveNullValue) {
+          pos += 1
+          return nullValue
+        }
+        pos += 1
+      }
+      pos = _keySet.nextPos(pos)
+      if (pos >= 0) {
+        val ret = _values(pos)
+        pos += 1
+        ret
+      } else {
+        null.asInstanceOf[V]
+      }
+    }
+
+    override def hasNext: Boolean = nextV != null
+    override def next(): V = {
+      val v = nextV
+      nextV = computeNextV()
+      v
     }
   }
 
