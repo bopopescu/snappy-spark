@@ -30,6 +30,12 @@ if [ -n "$1" ]; then
   fi
 fi
 
+if [ "${SCALA}" = "scala-2.11" ]; then
+  ./dev/change-version-to-2.11.sh
+elif [ "${SCALA}" = "scala-2.10" ]; then
+  ./dev/change-version-to-2.10.sh
+fi
+
 if [ -z "${ARGS}" ]; then
   ${BUILDER} -Pyarn -Phadoop-2.4 -Dhadoop.version=2.4.1 -Phive -Phive-thriftserver -DskipTests -D${SCALA}
 else
