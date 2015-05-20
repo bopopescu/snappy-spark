@@ -72,3 +72,5 @@ metastore/
 warehouse/
 TempStatsStore/
 sql/hive-thriftserver/test_warehouses
+
+pom.xml-e
