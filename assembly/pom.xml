@@ -197,11 +197,11 @@
       </dependencies>
     </profile>
     <profile>
-      <id>spark-ganglia-lgpl</id>
+      <id>snappy-spark-ganglia-lgpl</id>
       <dependencies>
         <dependency>
           <groupId>org.apache.spark</groupId>
-          <artifactId>spark-ganglia-lgpl_${scala.binary.version}</artifactId>
+          <artifactId>snappy-spark-ganglia-lgpl_${scala.binary.version}</artifactId>
           <version>${project.version}</version>
         </dependency>
       </dependencies>

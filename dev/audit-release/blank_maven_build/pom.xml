@@ -18,7 +18,7 @@
 
 <project>
   <groupId>spark.audit</groupId>
-  <artifactId>spark-audit</artifactId>
+  <artifactId>snappy-spark-audit</artifactId>
   <modelVersion>4.0.0</modelVersion>
   <name>Spark Release Auditor</name>
   <packaging>jar</packaging>
