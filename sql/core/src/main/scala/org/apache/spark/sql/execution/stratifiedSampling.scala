@@ -1,18 +1,19 @@
 package org.apache.spark.sql.execution
 
 import scala.collection.Iterator
+import scala.collection.mutable.OpenHashMap
 import scala.language.reflectiveCalls
 import scala.util.Sorting
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.rdd.PartitionwiseSampledRDD
+import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.expressions.EmptyRow
 import org.apache.spark.sql.collection.MultiColumnOpenHashMap
 import org.apache.spark.sql.types.DataType
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.Row
 import org.apache.spark.util.random.RandomSampler
 import org.apache.spark.util.random.XORShiftRandom
 
@@ -35,10 +36,16 @@ case class StratifiedSample(options: Map[String, Any], tableSchema: StructType,
 
 object StratifiedSampler {
 
+  private val globalMap = new OpenHashMap[String, StratifiedSampler]
+
   implicit class StringExtensions(val s: String) extends AnyVal {
     def ci = new {
       def unapply(other: String) = s.equalsIgnoreCase(other)
     }
+  }
+
+  def fillArray[T](a: Array[T], v: T, start: Int, endP1: Int) = {
+    start until endP1 foreach { a(_) = v }
   }
 
   def columnIndex(col: String, cols: Array[String]) = {
@@ -64,11 +71,12 @@ object StratifiedSampler {
     qcsOf(qa, schema.fieldNames)
 
   def apply(options: Map[String, Any], schema: StructType): StratifiedSampler = {
+    val nameTest = "name".ci
     val qcsTest = "qcs".ci
     val fracTest = "fraction".ci
     val csizeTest = "cacheSize".ci
     val rsizeTest = "reservoirTest".ci
-    val timeSeriesTest = "timeSeries".ci
+    val timeSeriesColumnTest = "timeSeriesColumn".ci
     val timeIntervalTest = "timeInterval".ci
     val timeIntervalSpec = "([0-9]+)(s|m|h)".r
     val cols = schema.fieldNames
@@ -77,48 +85,48 @@ object StratifiedSampler {
     // tuple of (qcs, fraction, cacheSize) like an aggregate.
     // This "aggregate" simply keeps the last values for the corresponding
     // keys as found when folding the map.
-    val (qcs, fraction, cacheSize, timeSeries, timeInterval) = options.foldLeft(
-      Array.emptyIntArray, 0.0, 0, -1, 0) {
-        case ((qs, fr, sz, ts, ti), (opt, optV)) => {
+    val (nm, qcs, fraction, cacheSize, tsCol, timeInterval) = options.foldLeft(
+      "", Array.emptyIntArray, 0.0, 0, -1, 0) {
+        case ((n, qs, fr, sz, ts, ti), (opt, optV)) => {
           opt match {
             case qcsTest() => optV match {
-              case qi: Array[Int] => (qi, fr, sz, ts, ti)
-              case q: String      => (qcsOf(q.split(","), cols), fr, sz, ts, ti)
+              case qi: Array[Int] => (n, qi, fr, sz, ts, ti)
+              case q: String      => (n, qcsOf(q.split(","), cols), fr, sz, ts, ti)
               case _ => throw new AnalysisException(
                 s"""StratifiedSampler: Cannot parse 'qcs'="$optV" among
                   (${cols.mkString(", ")})""")
             }
             case fracTest() => optV match {
-              case fd: Double => (qs, fd, sz, ts, ti)
-              case fs: String => (qs, fs.toDouble, sz, ts, ti)
-              case ff: Float  => (qs, ff.toDouble, sz, ts, ti)
-              case fi: Int    => (qs, fi.toDouble, sz, ts, ti)
-              case fl: Long   => (qs, fl.toDouble, sz, ts, ti)
+              case fd: Double => (n, qs, fd, sz, ts, ti)
+              case fs: String => (n, qs, fs.toDouble, sz, ts, ti)
+              case ff: Float  => (n, qs, ff.toDouble, sz, ts, ti)
+              case fi: Int    => (n, qs, fi.toDouble, sz, ts, ti)
+              case fl: Long   => (n, qs, fl.toDouble, sz, ts, ti)
               case _ => throw new AnalysisException(
                 s"""StratifiedSampler: Cannot parse double 'fraction'=$optV""")
             }
             case csizeTest() | rsizeTest() => optV match {
-              case si: Int    => (qs, fr, si, ts, ti)
-              case ss: String => (qs, fr, ss.toInt, ts, ti)
-              case sl: Long   => (qs, fr, sl.toInt, ts, ti)
+              case si: Int    => (n, qs, fr, si, ts, ti)
+              case ss: String => (n, qs, fr, ss.toInt, ts, ti)
+              case sl: Long   => (n, qs, fr, sl.toInt, ts, ti)
               case _ => throw new AnalysisException(
                 s"""StratifiedSampler: Cannot parse int 'cacheSize'=$optV""")
             }
-            case timeSeriesTest() => optV match {
-              case tss: String => (qs, fr, sz, columnIndex(tss, cols), ti)
-              case tsi: Int    => (qs, fr, sz, tsi, ti)
+            case timeSeriesColumnTest() => optV match {
+              case tss: String => (n, qs, fr, sz, columnIndex(tss, cols), ti)
+              case tsi: Int    => (n, qs, fr, sz, tsi, ti)
               case _ => throw new AnalysisException(
-                s"""StratifiedSampler: Cannot parse 'timeSeries'=$optV""")
+                s"""StratifiedSampler: Cannot parse 'timeSeriesColumn'=$optV""")
             }
             case timeIntervalTest() => optV match {
-              case tii: Int  => (qs, fr, sz, ts, tii)
-              case til: Long => (qs, fr, sz, ts, til.toInt)
+              case tii: Int  => (n, qs, fr, sz, ts, tii)
+              case til: Long => (n, qs, fr, sz, ts, til.toInt)
               case tis: String => tis match {
                 case timeIntervalSpec(interval, unit) =>
                   unit match {
-                    case "s" => (qs, fr, sz, ts, interval.toInt)
-                    case "m" => (qs, fr, sz, ts, interval.toInt * 60)
-                    case "h" => (qs, fr, sz, ts, interval.toInt * 3600)
+                    case "s" => (n, qs, fr, sz, ts, interval.toInt)
+                    case "m" => (n, qs, fr, sz, ts, interval.toInt * 60)
+                    case "h" => (n, qs, fr, sz, ts, interval.toInt * 3600)
                     case _ => throw new AssertionError(
                       s"""unexpected regex match 'unit'=$unit""")
                   }
@@ -128,17 +136,37 @@ object StratifiedSampler {
               case _ => throw new AnalysisException(
                 s"""StratifiedSampler: Cannot parse 'timeInterval'=$optV""")
             }
+            case nameTest() => (optV.toString, qs, fr, sz, ts, ti)
             case _ => throw new AnalysisException(
               s"""StratifiedSampler: Unknown option "$opt"""")
           }
         }
       }
 
+    if (nm.length > 0) {
+      globalMap.getOrElse(nm, {
+        val sampler = newSampler(qcs, fraction, cacheSize, tsCol,
+          timeInterval, schema)
+        // insert into global map
+        globalMap(nm) = sampler
+        sampler
+      })
+    } else {
+      newSampler(qcs, fraction, cacheSize, tsCol, timeInterval, schema)
+    }
+  }
+
+  def removeSampler(name: String): Option[StratifiedSampler] = {
+    globalMap.remove(name)
+  }
+
+  private def newSampler(qcs: Array[Int], fraction: Double, cacheSize: Int,
+      tsCol: Int, timeInterval: Int, schema: StructType): StratifiedSampler = {
     if (qcs.length == 0)
       throw new AnalysisException("StratifiedSampler: QCS is empty")
     else if (fraction > 0.0)
       new StratifiedSamplerCached(qcs, math.max(cacheSize, 1), schema,
-        fraction, timeSeries, timeInterval)
+        fraction, tsCol, timeInterval)
     else if (cacheSize > 0)
       new StratifiedSamplerFullReservoir(qcs, cacheSize, schema)
     else throw new AnalysisException(
@@ -176,6 +204,8 @@ abstract class StratifiedSampler(val qcs: Array[Int], val cacheSize: Int,
 
   def append(row: Row): Boolean
 
+  def iterator: Iterator[Row] = iterator(nmaxSamples)
+
   protected final def iterator(maxSamples: Int) = {
     stratas.valuesIterator.flatMap(sr => new Iterator[Row] {
 
@@ -189,8 +219,8 @@ abstract class StratifiedSampler(val qcs: Array[Int], val cacheSize: Int,
         } else if (cacheSize > 0) {
           // reset transient data
 
-          // check for the end of current time-slot; if it has ended, then
-          // also reset the "shortFall" and other such history
+          // check for the end of current time-slot indicated by maxSamples=0;
+          // if it has ended, then reset "prevShortFall" and other such history
           if (maxSamples == 0) {
             sr.nsamples = 0
             sr.ntotalSize = 0
@@ -204,7 +234,7 @@ abstract class StratifiedSampler(val qcs: Array[Int], val cacheSize: Int,
           // growing possibly without bound (in case some strata consistently
           //   gets small number of total rows less than sample size)
           if (reservoir.length == cacheSize) {
-            0 until nsamples foreach { i => reservoir(i) = EmptyRow }
+            StratifiedSampler.fillArray(reservoir, EmptyRow, 0, nsamples)
           } else {
             sr.reservoir = new Array[Row](cacheSize)
           }
@@ -223,8 +253,6 @@ abstract class StratifiedSampler(val qcs: Array[Int], val cacheSize: Int,
       }
     })
   }
-
-  final def iterator: Iterator[Row] = iterator(nmaxSamples)
 }
 
 // TODO: optimize by having metadata as multiple columns like key;
@@ -239,25 +267,13 @@ final class StrataReservoir(var nsamples: Int, var ntotalSize: Int,
                             var weightage: Double, var reservoir: Array[Row],
                             var reservoirSize: Int, var batchTotalSize: Int,
                             var prevShortFall: Int) {
-
-  def init(cacheSize: Int) = {
-    nsamples = 0
-    ntotalSize = 0
-    weightage = 0.0
-    if (reservoir.length != cacheSize) {
-      reservoir = new Array[Row](cacheSize)
-    }
-    reservoirSize = 0
-    batchTotalSize = 0
-    prevShortFall = 0
-  }
 }
 
 final class StratifiedSamplerCached(override val qcs: Array[Int],
                                     override val cacheSize: Int,
                                     override val schema: StructType,
                                     val fraction: Double,
-                                    val timeSeries: Int,
+                                    val timeSeriesColumn: Int,
                                     val timeInterval: Int)
     extends StratifiedSampler(qcs, cacheSize, schema) {
 
@@ -265,14 +281,14 @@ final class StratifiedSamplerCached(override val qcs: Array[Int],
   var timeSlotStart: Long = 0
 
   private def tsColumnTime(row: Row): Long = {
-    if (timeSeries >= 0) {
-      val ts = row.get(timeSeries)
+    if (timeSeriesColumn >= 0) {
+      val ts = row.get(timeSeriesColumn)
       ts match {
         case tl: Long          => tl
         case ti: Int           => ti.toLong
         case td: java.sql.Date => td.getTime
         case _ => throw new AnalysisException(
-          s"""StratifiedSampler: Cannot parse 'timeSeries'=$ts""")
+          s"""StratifiedSampler: Cannot parse 'timeSeriesColumn'=$ts""")
       }
     } else {
       System.currentTimeMillis
@@ -286,6 +302,7 @@ final class StratifiedSamplerCached(override val qcs: Array[Int],
         val newRow = row.copy
         val reservoir = new Array[Row](cacheSize)
         reservoir(0) = newRow
+        StratifiedSampler.fillArray(reservoir, EmptyRow, 1, cacheSize)
         val sr = new StrataReservoir(1, 1, 0.0, reservoir,
           1, 1, math.max(0, nmaxSamples - cacheSize))
         if (nmaxSamples == 0) {
@@ -312,6 +329,8 @@ final class StratifiedSamplerCached(override val qcs: Array[Int],
           if (reservoirLen <= sr.reservoirSize) {
             val newReservoir = new Array[Row](math.min(reservoirCapacity,
               reservoirLen + (reservoirLen >>> 1) + 1))
+            StratifiedSampler.fillArray(newReservoir, EmptyRow,
+                reservoirLen, newReservoir.length)
             System.arraycopy(sr.reservoir, 0, newReservoir,
               0, reservoirLen)
             sr.reservoir = newReservoir
@@ -338,8 +357,8 @@ final class StratifiedSamplerCached(override val qcs: Array[Int],
       // reset batch counters
       nbatchSamples = 0
       slotSize = 0
-      // reset nmaxSamples (thus causing shortFall to clear up) in case
-      // the current timeSlot is done
+      // in case the current timeSlot is over, reset nmaxSamples
+      // (thus causing shortFall to clear up)
       if (timeSlotStart > 0) {
         val timeSlot = tsColumnTime(row)
         if ((timeSlot - timeSlotStart) >= (timeInterval.toLong * 1000L)) {
@@ -397,7 +416,7 @@ final class StratifiedSamplerCached(override val qcs: Array[Int],
   }
 
   override def clone: StratifiedSamplerCached = new StratifiedSamplerCached(
-    qcs, cacheSize, schema, fraction, timeSeries, timeInterval)
+    qcs, cacheSize, schema, fraction, timeSeriesColumn, timeInterval)
 }
 
 final class StratifiedSamplerFullReservoir(override val qcs: Array[Int],
@@ -413,6 +432,7 @@ final class StratifiedSamplerFullReservoir(override val qcs: Array[Int],
         val newRow = row.copy
         val reservoir = new Array[Row](strataSize)
         reservoir(0) = newRow
+        StratifiedSampler.fillArray(reservoir, EmptyRow, 1, strataSize)
         val sr = new StrataReservoir(1, 1, 0.0, reservoir, 1, 1, 0)
         (newRow, sr)
       },
