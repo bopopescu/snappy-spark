@@ -27,7 +27,7 @@ import org.apache.hadoop.mapreduce.lib.output.{FileOutputCommitter => MapReduceF
 import org.apache.hadoop.util.Shell
 import parquet.hadoop.util.ContextUtil
 
-import org.apache.spark._
+import org.apache.spark.{Logging, SerializableWritable, SparkException, SparkHadoopWriter, TaskContext}
 import org.apache.spark.mapred.SparkHadoopMapRedUtil
 import org.apache.spark.mapreduce.SparkHadoopMapReduceUtil
 import org.apache.spark.sql.catalyst.CatalystTypeConverters

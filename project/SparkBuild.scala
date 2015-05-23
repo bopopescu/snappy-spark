@@ -291,10 +291,10 @@ object OldDeps {
     scalaVersion := "2.10.4",
     retrieveManaged := true,
     retrievePattern := "[type]s/[artifact](-[revision])(-[classifier]).[ext]",
-    libraryDependencies := Seq("snappy-spark-streaming-mqtt", "snappy-spark-streaming-zeromq",
-      "snappy-spark-streaming-flume", "snappy-spark-streaming-kafka", "snappy-spark-streaming-twitter",
-      "snappy-spark-streaming", "snappy-spark-mllib", "snappy-spark-bagel", "snappy-spark-graphx",
-      "snappy-spark-core").map(versionArtifact(_).get intransitive())
+    libraryDependencies := Seq("spark-streaming-mqtt", "spark-streaming-zeromq",
+      "spark-streaming-flume", "spark-streaming-kafka", "spark-streaming-twitter",
+      "spark-streaming", "spark-mllib", "spark-bagel", "spark-graphx",
+      "spark-core").map(versionArtifact(_).get intransitive())
   )
 }
 

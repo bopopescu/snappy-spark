@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package test.org.apache.spark.sql.hive;
+package org.apache.spark.sql.hive;
 
 import java.io.File;
 import java.io.IOException;
