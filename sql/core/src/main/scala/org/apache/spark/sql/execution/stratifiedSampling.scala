@@ -28,7 +28,7 @@ case class StratifiedSample(options: Map[String, Any], tableSchema: StructType,
 
   override def output: Seq[Attribute] = child.output
 
-  override def execute(): RDD[Row] = {
+  protected override def doExecute(): RDD[Row] = {
     new PartitionwiseSampledRDD[Row, Row](child.execute(),
       StratifiedSampler(options, tableSchema), true)
   }
