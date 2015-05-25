@@ -65,7 +65,7 @@ private[spark] object SizeEstimator extends Logging {
   // Size of an object reference
   // Based on https://wikis.oracle.com/display/HotSpotInternals/CompressedOops
   private var isCompressedOops = false
-  private var pointerSize = 4
+  var pointerSize = 4
 
   // Minimum size of a java.lang.Object
   private var objectSize = 8
@@ -336,7 +336,7 @@ private[spark] object SizeEstimator extends Logging {
     newInfo
   }
 
-  private def alignSize(size: Long): Long = alignSizeUp(size, ALIGN_SIZE)
+  def alignSize(size: Long): Long = alignSizeUp(size, ALIGN_SIZE)
 
   /**
    * Compute aligned size. The alignSize must be 2^n, otherwise the result will be wrong.

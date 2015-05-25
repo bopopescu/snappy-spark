@@ -20,6 +20,7 @@ package org.apache.spark.util.collection
 import java.io.OutputStream
 
 import scala.collection.mutable.ArrayBuffer
+import org.apache.spark.util.SizeEstimator
 
 /**
  * A logical byte buffer that wraps a list of byte arrays. All the byte arrays have equal size. The
@@ -31,7 +32,8 @@ private[spark] class ChainedBuffer(chunkSize: Int) {
   private val chunkSizeLog2 = (math.log(chunkSize) / math.log(2)).toInt
   assert(math.pow(2, chunkSizeLog2).toInt == chunkSize,
     s"ChainedBuffer chunk size $chunkSize must be a power of two")
-  private val chunks: ArrayBuffer[Array[Byte]] = new ArrayBuffer[Array[Byte]]()
+  private val chunks: ArrayBuffer[Array[Byte]] = new ArrayBuffer[Array[Byte]](
+      ChainedBuffer.InitSize)
   private var _size: Int = _
 
   /**
@@ -125,6 +127,26 @@ private[spark] class ChainedBuffer(chunkSize: Int) {
    * Size of the logical buffer.
    */
   def size: Int = _size
+
+  def bufferCapacity: Int = {
+    // buffer grows in multiples of InitSize
+    var size = ChainedBuffer.InitSize
+    val chunksSize = chunks.size
+    while (size < chunksSize) {
+      size = (size << 1)
+    }
+    size
+  }
+
+  /** Estimated memory overhead ignoring the base object. */
+  def estimateOverhead(arrayOverhead: Long): Long =
+    (SizeEstimator.alignSize(chunkSize) + arrayOverhead) * chunks.size +
+      // account for the ArrayBuffer overhead
+      SizeEstimator.alignSize(bufferCapacity * SizeEstimator.pointerSize)
+}
+
+private[spark] object ChainedBuffer {
+  val InitSize: Int = 16
 }
 
 /**

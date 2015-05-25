@@ -20,11 +20,11 @@ package org.apache.spark.util.collection
 import java.io.InputStream
 import java.nio.IntBuffer
 import java.util.Comparator
-
 import org.apache.spark.SparkEnv
 import org.apache.spark.serializer.{JavaSerializerInstance, SerializerInstance}
 import org.apache.spark.storage.BlockObjectWriter
 import org.apache.spark.util.collection.PartitionedSerializedPairBuffer._
+import org.apache.spark.util.SizeEstimator
 
 /**
  * Append-only buffer of key-value pairs, each with a corresponding partition ID, that serializes
@@ -115,6 +115,51 @@ private[spark] class PartitionedSerializedPairBuffer[K, V](
   }
 
   override def estimateSize: Long = metaBuffer.capacity * 4 + kvBuffer.capacity
+
+  override def estimateOverhead(): Long = {
+    val estimate = PartitionedSerializedPairBuffer.estimatedOverhead
+    val overhead = estimate._1
+    val metaBuffer = this.metaBuffer
+    // go ahead with cached overhead in case: a) incoming has null data fields
+    // b) this determined the overhead on object with non-null data fields
+    if (overhead > 0 && (metaBuffer == null || estimate._2)) {
+      // check for case when incoming has null data fields and this also
+      // determined the overhead on object with null data fields
+      if (metaBuffer == null && !estimate._2) {
+        overhead
+      } else {
+        // adjust for the change in metaBuffer and kvBuffer sizes
+        overhead + adjustOverheadChange(metaBuffer, estimate._3,
+          this.kvBuffer, estimate._4, estimate._5)
+      }
+      // global sync when caching the object size the first time
+    } else classOf[PartitionedSerializedPairBuffer[K, V]].synchronized {
+      val estimateTmp = PartitionedSerializedPairBuffer.estimatedOverhead
+      // double check if another thread initialized the cache
+      if (estimateTmp._1 > 0 && (metaBuffer == null || estimateTmp._2)) {
+        estimateTmp._1 + adjustOverheadChange(metaBuffer, estimateTmp._3,
+          this.kvBuffer, estimateTmp._4, estimateTmp._5)
+      } else {
+        val arrayOverhead = if (estimateTmp._5 > 0)
+          estimateTmp._5 else SizeEstimator.estimate(new Array[Byte](0))
+        // if incoming has non-null data fields, then keep the buffer sizes
+        // at that point, else mark a flag as false which can be overridden
+        // later if an object with non-null data fields is seen
+        if (metaBuffer != null) {
+          val newEstimate = (SizeEstimator.estimate(this), true,
+            SizeEstimator.alignSize(metaBuffer.capacity * 4),
+            this.kvBuffer.estimateOverhead(arrayOverhead), arrayOverhead)
+          PartitionedSerializedPairBuffer.estimatedOverhead = newEstimate
+          newEstimate._1
+        } else {
+          val newEstimate = (SizeEstimator.estimate(this), false,
+            0L, 0L, arrayOverhead)
+          PartitionedSerializedPairBuffer.estimatedOverhead = newEstimate
+          newEstimate._1
+        }
+      }
+    }
+  }
 
   override def destructiveSortedWritablePartitionedIterator(keyComparator: Option[Comparator[K]])
     : WritablePartitionedIterator = {
@@ -251,4 +296,26 @@ private[spark] object PartitionedSerializedPairBuffer {
   val VAL_END = 2
   val PARTITION = 3
   val RECORD_SIZE = Seq(KEY_START, VAL_START, VAL_END, PARTITION).size // num ints of metadata
+
+  /**
+   * Stores {object overhead(OO), whether metaBuffer != null in OO,
+   * metaBuffer data overhead in OO, kvBuffer data overhead in OO,
+   * Array[Byte](0) overhead)
+   */
+  @volatile private var estimatedOverhead = (0L, false, 0L, 0L, 0L)
+
+  private def adjustOverheadChange(metaBuffer: IntBuffer,
+                                   metaInitOverhead: Long,
+                                   kvBuffer: ChainedBuffer,
+                                   kvInitOverhead: Long,
+                                   arrayOverhead: Long): Long = {
+    if (metaBuffer != null) {
+      // adjust for the change in metaBuffer size
+      (SizeEstimator.alignSize(metaBuffer.capacity * 4) - metaInitOverhead) +
+        // add kvBuffer overhead adjusting the initial ArrayBuffer capacity
+        (kvBuffer.estimateOverhead(arrayOverhead) - kvInitOverhead)
+    } else {
+      -(metaInitOverhead + kvInitOverhead)
+    }
+  }
 }

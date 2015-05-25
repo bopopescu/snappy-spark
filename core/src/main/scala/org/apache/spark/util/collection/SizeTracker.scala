@@ -75,7 +75,7 @@ private[spark] trait SizeTracker {
    * Take a new sample of the current collection's size.
    */
   private def takeSample(): Unit = {
-    samples.enqueue(Sample(SizeEstimator.estimate(this), numUpdates))
+    samples.enqueue(Sample(estimateOverhead(), numUpdates))
     // Only use the last two samples to extrapolate
     if (samples.size > 2) {
       samples.dequeue()
@@ -97,6 +97,10 @@ private[spark] trait SizeTracker {
     assert(samples.nonEmpty)
     val extrapolatedDelta = bytesPerUpdate * (numUpdates - samples.last.numUpdates)
     (samples.last.size + extrapolatedDelta).toLong
+  }
+
+  protected def estimateOverhead(): Long = {
+    SizeEstimator.estimate(this)
   }
 }
 
