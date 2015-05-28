@@ -1,8 +1,9 @@
 The following steps are tested working to build Zeppelin master against snappy-spark.
 
-1. Build snappy-spark with scala-2.10. Required because Zepplin seems to be having trouble building with 2.11 version of snappy-spark-repl library. Use this with our build script in snappy-spark repository:
+1. Build snappy-spark with scala-2.10. Required because Zepplin seems to be having trouble building with 2.11 version of snappy-spark-repl library. Use this with our build script in snappy-spark repository.  Also, be sure to use JDK 1.7, as there are errors when compiling with JDK 1.8.  There are also errors (that can be ignored) during the compile, so we have to issue two separate commands: one to build (has errors) and one to publish the successful build jars:
 
-    snappy/spark-build.sh -scala-2.10 compile publish-local
+    snappy/spark-build.sh -scala-2.10 compile 
+    snappy/spark-build.sh -scala-2.10 publish-local
 
 Note: I also had to comment out external/flume, external/flume-sink and
 examples from snappy-spark/pom.xml <modules>...</modules> entity.  There
