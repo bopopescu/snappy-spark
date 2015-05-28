@@ -4,6 +4,28 @@ The following steps are tested working to build Zeppelin master against snappy-s
 
     snappy/spark-build.sh -scala-2.10 compile publish-local
 
+Note: I also had to comment out external/flume, external/flume-sink and
+examples from snappy-spark/pom.xml <modules>...</modules> entity.  There
+seems to be compile error in flume, but it is not needed for zeppelin:
+
+    ...
+    <module>sql/snappy</module>
+    <module>assembly</module>
+    <module>external/twitter</module>
+    <!--
+    <module>external/flume</module>
+    <module>external/flume-sink</module>
+    -->
+    <module>external/mqtt</module>
+    <module>external/zeromq</module>
+    <!--
+    <module>examples</module>
+    -->
+    <module>repl</module>
+    <module>launcher</module>
+    ...
+
+
 2. Apply the patch in this directory to zeppelin sources (with "patch -p1 < zeppelin-snappy.diff").  This will change artifacts to snappy-spark-* from spark-* as created by snappy-spark builds.
 
 3. Lastly build zeppelin with:
