@@ -414,7 +414,7 @@ final class StratifiedSamplerCached(override val qcs: Array[Int],
     */
 
     items.flatMap(row => {
-      if (append(row)) {
+      if (!append(row)) {
         Iterator.empty
       } else {
         // return current samples and clear for reuse
