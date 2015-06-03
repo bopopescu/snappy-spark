@@ -17,24 +17,28 @@
 
 package org.apache.spark.sql.collection
 
-import scala.reflect.ClassTag
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.types.DataType
 import org.apache.spark.sql.catalyst.expressions.SpecificMutableRow
+import org.apache.spark.sql.types.DataType
+
+import scala.reflect.ClassTag
 
 /**
- * A fast hash map implementation for nullable keys. This hash map supports insertions and updates,
- * but not deletions. This map is about 5X faster than java.util.HashMap, while using much less
- * space overhead.
+ * A fast hash map implementation for nullable keys. This hash map supports
+ * insertions and updates, but not deletions. This map is about 5X faster than
+ * java.util.HashMap, while using much less space overhead.
  *
  * Under the hood, it uses our MultiColumnOpenHashSet implementation.
  */
 private[spark] class MultiColumnOpenHashMap[@specialized(Long, Int, Double) V: ClassTag](
-    val columns: Array[Int],
-    val types: Array[DataType],
-    val numColumns: Int,
-    val initialCapacity: Int,
-    val loadFactor: Double) extends Iterable[(Row, V)] with Serializable {
+  val columns: Array[Int],
+  val types: Array[DataType],
+  val numColumns: Int,
+  val initialCapacity: Int,
+  val loadFactor: Double)
+    extends SegmentMap[Row, V]
+    with Iterable[(Row, V)]
+    with Serializable {
 
   def this(columns: Array[Int], types: Array[DataType], initialCapacity: Int) =
     this(columns, types, columns.length, initialCapacity, 0.7)
@@ -42,35 +46,62 @@ private[spark] class MultiColumnOpenHashMap[@specialized(Long, Int, Double) V: C
   def this(columns: Array[Int], types: Array[DataType]) =
     this(columns, types, 64)
 
-  protected var _keySet = new MultiColumnOpenHashSet(columns, types,
+  protected var _keySet = new MultiColumnOpenHashSet(columns, null, types,
     numColumns, initialCapacity, loadFactor)
 
-  // Init in constructor (instead of in declaration) to work around a Scala compiler specialization
-  // bug that would generate two arrays (one for Object and one for specialized T).
+  // Init in constructor (instead of in declaration) to work around
+  // a Scala compiler specialization bug that would generate two arrays
+  // (one for Object and one for specialized T).
   private var _values: Array[V] = _
   _values = new Array[V](_keySet.capacity)
 
   @transient private var _oldValues: Array[V] = null
 
-  // Treat the null key differently so we can use nulls in "data" to represent empty items.
-  private var haveNullValue = false
+  // Treat the null key differently so we can use nulls in "data"
+  // to represent empty items.
+  private var noNullValue = true
   private var nullValue: V = null.asInstanceOf[V]
 
-  override def size: Int = if (haveNullValue) _keySet.size + 1 else _keySet.size
+  override def size: Int = if (noNullValue) _keySet.size else _keySet.size + 1
+
+  override def isEmpty: Boolean = _keySet.size == 0 && noNullValue
 
   /** Tests whether this map contains a binding for a key. */
-  def contains(k: Row): Boolean = {
-    if (k != null) {
-      _keySet.getPos(k) != MultiColumnOpenHashSet.INVALID_POS
+  def contains(r: Row): Boolean = {
+    if (r != null) {
+      val keySet = _keySet
+      keySet.getPos(r, keySet.getHash(r)) != MultiColumnOpenHashSet.INVALID_POS
     } else {
-      haveNullValue
+      !noNullValue
+    }
+  }
+  /** Tests whether this map contains a binding for a key. */
+  override def contains(r: Row, hash: Int): Boolean = {
+    if (r != null) {
+      _keySet.getPos(r, hash) != MultiColumnOpenHashSet.INVALID_POS
+    } else {
+      !noNullValue
     }
   }
 
   /** Get the value for a given key */
-  def apply(k: Row): V = {
-    if (k != null) {
-      val pos = _keySet.getPos(k)
+  def apply(r: Row): V = {
+    if (r != null) {
+      val keySet = _keySet
+      val pos = keySet.getPos(r, keySet.getHash(r))
+      if (pos >= 0) {
+        _values(pos)
+      } else {
+        null.asInstanceOf[V]
+      }
+    } else {
+      nullValue
+    }
+  }
+  /** Get the value for a given key */
+  override def apply(r: Row, hash: Int): V = {
+    if (r != null) {
+      val pos = _keySet.getPos(r, hash)
       if (pos >= 0) {
         _values(pos)
       } else {
@@ -81,84 +112,147 @@ private[spark] class MultiColumnOpenHashMap[@specialized(Long, Int, Double) V: C
     }
   }
 
-  /** Set the value for a key */
-  def update(k: Row, v: V) {
-    if (k != null) {
-      val pos = _keySet.addWithoutResize(k) & MultiColumnOpenHashSet.POSITION_MASK
-      _values(pos) = v
-      _keySet.rehashIfNeeded(k, grow, move)
-      _oldValues = null
+  /** Optionally get the value for a given key */
+  def get(r: Row): Option[V] = {
+    if (r != null) {
+      val keySet = _keySet
+      val pos = keySet.getPos(r, keySet.getHash(r))
+      if (pos >= 0) {
+        Some(_values(pos))
+      } else {
+        None
+      }
     } else {
-      haveNullValue = true
-      nullValue = v
+      None
     }
   }
 
-  /**
-   * If the key doesn't exist yet in the hash map, set its value to defaultValue; otherwise,
-   * set its value to mergeValue(oldValue).
-   *
-   * @return the newly updated value.
-   */
-  def changeValue(k: Row, defaultValue: => V, mergeValue: (V) => V): V = {
-    if (k != null) {
-      val pos = _keySet.addWithoutResize(k)
+  /** Set the value for a key */
+  def update(r: Row, v: V): Unit = {
+    if (r != null) {
+      val keySet = _keySet
+      val pos = keySet.addWithoutResize(r, keySet.getHash(r))
       if ((pos & MultiColumnOpenHashSet.NONEXISTENCE_MASK) != 0) {
-        val newValue = defaultValue
-        _values(pos & MultiColumnOpenHashSet.POSITION_MASK) = newValue
-        _keySet.rehashIfNeeded(k, grow, move)
-        newValue
+        _values(pos & MultiColumnOpenHashSet.POSITION_MASK) = v
+        keySet.rehashIfNeeded(r, grow, move)
       } else {
-        _values(pos) = mergeValue(_values(pos))
-        _values(pos)
+        _values(pos) = v
       }
     } else {
-      if (haveNullValue) {
-        nullValue = mergeValue(nullValue)
-      } else {
-        haveNullValue = true
-        nullValue = defaultValue
+      if (noNullValue) {
+        noNullValue = false
       }
-      nullValue
+      nullValue = v
+    }
+  }
+  /** Set the value for a key */
+  override def update(r: Row, hash: Int, v: V): Boolean = {
+    if (r != null) {
+      val keySet = _keySet
+      val pos = keySet.addWithoutResize(r, hash)
+      if ((pos & MultiColumnOpenHashSet.NONEXISTENCE_MASK) != 0) {
+        _values(pos & MultiColumnOpenHashSet.POSITION_MASK) = v
+        keySet.rehashIfNeeded(r, grow, move)
+        true
+      } else {
+        _values(pos) = v
+        false
+      }
+    } else {
+      if (noNullValue) {
+        noNullValue = false
+        nullValue = v
+        true
+      } else {
+        nullValue = v
+        false
+      }
     }
   }
 
   /**
    * If the key doesn't exist yet in the hash map, set its value to
-   * defaultValue; otherwise,set its value to mergeValue(oldValue).
+   * defaultValue; otherwise, set its value to mergeValue(oldValue).
    *
    * @return the newly updated value.
    */
-  def changeKeyValue(k: Row, keyValue: () => (Row, V),
-                     mergeValue: (V) => Unit): V = {
-    if (k != null) {
-      val pos = _keySet.addWithoutResize(k)
-      if ((pos & MultiColumnOpenHashSet.NONEXISTENCE_MASK) == 0) {
-        mergeValue(_values(pos))
-        _values(pos)
-      } else {
-        val posn = pos & MultiColumnOpenHashSet.POSITION_MASK
-        val (newKey, newValue) = keyValue()
-        _keySet.setValue(posn, newKey)
-        _values(posn) = newValue
-        _keySet.rehashIfNeeded(newKey, grow, move)
+  def changeValue(r: Row, change: ChangeValue[Row, V]): V = {
+    if (r != null) {
+      val keySet = _keySet
+      val pos = keySet.addWithoutResize(r, keySet.getHash(r))
+      if ((pos & MultiColumnOpenHashSet.NONEXISTENCE_MASK) != 0) {
+        val newValue = change.defaultValue(r)
+        _values(pos & MultiColumnOpenHashSet.POSITION_MASK) = newValue
+        keySet.rehashIfNeeded(r, grow, move)
         newValue
+      } else {
+        _values(pos) = change.mergeValue(r, _values(pos))
+        _values(pos)
       }
     } else {
-      if (haveNullValue) {
-        nullValue
+      if (noNullValue) {
+        noNullValue = false
+        nullValue = change.defaultValue(r)
       } else {
-        haveNullValue = true
-        val (newKey, newValue) = keyValue()
-        nullValue = newValue
+        nullValue = change.mergeValue(r, nullValue)
       }
       nullValue
     }
   }
+  /**
+   * If the key doesn't exist yet in the hash map, set its value to
+   * defaultValue; otherwise, set its value to mergeValue(oldValue).
+   *
+   * @return the newly updated value.
+   */
+  override def changeValue(r: Row, hash: Int,
+                           change: ChangeValue[Row, V]): Boolean = {
+    if (r != null) {
+      val keySet = _keySet
+      val pos = keySet.addWithoutResize(r, hash)
+      if ((pos & MultiColumnOpenHashSet.NONEXISTENCE_MASK) != 0) {
+        _values(pos & MultiColumnOpenHashSet.POSITION_MASK) =
+          change.defaultValue(r)
+        keySet.rehashIfNeeded(r, grow, move)
+        true
+      } else {
+        _values(pos) = change.mergeValue(r, _values(pos))
+        false
+      }
+    } else {
+      if (noNullValue) {
+        noNullValue = false
+        nullValue = change.defaultValue(r)
+        true
+      } else {
+        nullValue = change.mergeValue(r, nullValue)
+        false
+      }
+    }
+  }
+
+  override def fold[U](init: U)(f: (Row, V, U) => U): U = {
+    var v = init
+    // first check for null value
+    if (!noNullValue) {
+      v = f(null, nullValue, v)
+    }
+    // next go through the entire map
+    val keySet = _keySet
+    val values = _values
+    val currentKey: SpecificMutableRow = keySet.newEmptyValueAsRow()
+    var pos = keySet.nextPos(0)
+    while (pos >= 0) {
+      keySet.fillValueAsRow(pos, currentKey)
+      v = f(currentKey, values(pos), v)
+      pos = keySet.nextPos(pos + 1)
+    }
+    v
+  }
 
   override def iterator: Iterator[(Row, V)] = new Iterator[(Row, V)] {
     var pos = -1
-    var currentKey: SpecificMutableRow = _keySet.newEmptyValueAsRow()
+    val currentKey: SpecificMutableRow = _keySet.newEmptyValueAsRow()
     var nextPair: (Row, V) = computeNextPair()
 
     /**
@@ -167,15 +261,14 @@ private[spark] class MultiColumnOpenHashMap[@specialized(Long, Int, Double) V: C
      */
     def computeNextPair(): (Row, V) = {
       if (pos == -1) { // Treat position -1 as looking at the null value
-        if (haveNullValue) {
-          pos += 1
+        pos += 1
+        if (!noNullValue) {
           return (null, nullValue)
         }
-        pos += 1
       }
       pos = _keySet.nextPos(pos)
       if (pos >= 0) {
-        _keySet.getValueAsRow(pos, currentKey)
+        _keySet.fillValueAsRow(pos, currentKey)
         val ret = (currentKey, _values(pos))
         pos += 1
         ret
@@ -203,11 +296,10 @@ private[spark] class MultiColumnOpenHashMap[@specialized(Long, Int, Double) V: C
      */
     def computeNextV(): V = {
       if (pos == -1) { // Treat position -1 as looking at the null value
-        if (haveNullValue) {
-          pos += 1
+        pos += 1
+        if (!noNullValue) {
           return nullValue
         }
-        pos += 1
       }
       pos = _keySet.nextPos(pos)
       if (pos >= 0) {
@@ -227,11 +319,12 @@ private[spark] class MultiColumnOpenHashMap[@specialized(Long, Int, Double) V: C
     }
   }
 
-  // The following member variables are declared as protected instead of private for the
-  // specialization to work (specialized class extends the non-specialized one and needs access
-  // to the "private" variables).
-  // They also should have been val's. We use var's because there is a Scala compiler bug that
-  // would throw illegal access error at runtime if they are declared as val's.
+  // The following member variables are declared as protected instead of
+  // private for the specialization to work (specialized class extends the
+  // non-specialized one and needs access to the "private" variables).
+  // They also should have been val's. We use var because there is
+  // a Scala compiler bug that would throw illegal access error at runtime
+  // if they are declared as val's.
   protected var grow = (newCapacity: Int) => {
     _oldValues = _values
     _values = new Array[V](newCapacity)
