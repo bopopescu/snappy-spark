@@ -25,7 +25,7 @@
     <version>14</version>
   </parent>
   <groupId>org.apache.spark</groupId>
-  <artifactId>snappy-spark-parent_2.11</artifactId>
+  <artifactId>snappy-spark-parent_2.10</artifactId>
   <version>1.4.0-SNAPSHOT.2</version>
   <packaging>pom</packaging>
   <name>Spark Project Parent POM</name>
@@ -1765,9 +1765,6 @@
     </profile>
     <profile>
       <id>hive-0.13.1</id>
-      <activation>
-        <property><name>intellij</name></property>
-      </activation>
       <properties>
         <hive.version>0.13.1a</hive.version>
         <hive.version.short>0.13.1</hive.version.short>

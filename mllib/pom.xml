@@ -20,13 +20,13 @@
   <modelVersion>4.0.0</modelVersion>
   <parent>
     <groupId>org.apache.spark</groupId>
-    <artifactId>snappy-spark-parent_2.11</artifactId>
+    <artifactId>snappy-spark-parent_2.10</artifactId>
     <version>1.4.0-SNAPSHOT.2</version>
     <relativePath>../pom.xml</relativePath>
   </parent>
 
   <groupId>org.apache.spark</groupId>
-  <artifactId>snappy-spark-mllib_2.11</artifactId>
+  <artifactId>snappy-spark-mllib_2.10</artifactId>
   <properties>
     <sbt.project.name>mllib</sbt.project.name>
   </properties>
