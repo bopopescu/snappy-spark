@@ -210,6 +210,10 @@ private[sql] class ConcurrentSegmentedHashMap[K, V, M <: SegmentMap[K, V] : Clas
     if (added > 0) _size.addAndGet(added)
   }
 
+  def foldSegments[U](init: U)(f: (U, M) => U): U = {
+    _segments.foldLeft(init)(f)
+  }
+
   def foldRead[U](init: U)(f: (K, V, U) => U): U = {
     _segments.foldLeft(init) { (v, seg) =>
       SegmentMap.lock(seg.readLock()) {

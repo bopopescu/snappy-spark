@@ -13,6 +13,7 @@ import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.util.random.RandomSampler
 
 import scala.collection.mutable
+import scala.collection.mutable.ArrayBuffer
 import scala.util.Sorting
 
 /**
@@ -155,6 +156,15 @@ object StratifiedSampler {
     }
   }
 
+  def apply(name: String): Option[StratifiedSampler] = {
+    // not using getOrElse in one shot to allow taking only read lock
+    // for the common case, then release it and take write lock if new
+    // sampler has to be added
+    SegmentMap.lock(mapLock.readLock) {
+      globalMap.get(name)
+    }
+  }
+
   private[sql] def lookupOrAdd(qcs: Array[Int], name: String,
                                fraction: Double, strataSize: Int,
                                tsCol: Int, timeInterval: Int,
@@ -264,10 +274,25 @@ abstract class StratifiedSampler(val qcs: Array[Int], val name: String,
   def append[U](rows: Iterator[Row], init: U, process: (U, Row) => U,
                 endBatch: U => U): U
 
+  def iterator: Iterator[Row] = {
+    stratas.foldSegments(Iterator[Row]()) { (iter, seg) =>
+      iter ++ {
+        val sampleBuffer = new ArrayBuffer[Row](1000)
+        //sampleBuffer.clear()
+        SegmentMap.lock(seg.readLock()) {
+          seg.fold[Unit]()(foldReservoir(0, false, false, { (_, row) =>
+            sampleBuffer += row
+          }))
+        }
+        sampleBuffer.iterator
+      }
+    }
+  }
+
   override def segmentEnd(segment: SegmentMap[Row, StrataReservoir]): Unit = {}
 
-  def segmentEnd[U](segment: SegmentMap[Row, StrataReservoir], init: U,
-                    process: (U, Row) => U, endBatch: U => U): U = init
+  protected def segmentEnd[U](segment: SegmentMap[Row, StrataReservoir], init: U,
+                              process: (U, Row) => U, endBatch: U => U): U = init
 
   /** return a copy of the StratifiedSampler object */
   override def clone: StratifiedSampler =
@@ -276,11 +301,11 @@ abstract class StratifiedSampler(val qcs: Array[Int], val name: String,
   protected final def foldSegment[U](prevReservoirSize: Int, fullReset: Boolean,
                                      process: (U, Row) => U)
                                     (u: U, seg: ReservoirSegment): U = {
-    seg.fold(u)(foldReservoir(prevReservoirSize, fullReset, process))
+    seg.fold(u)(foldReservoir(prevReservoirSize, true, fullReset, process))
   }
 
-  protected final def foldReservoir[U](prevReservoirSize: Int, fullReset: Boolean,
-                                       process: (U, Row) => U)
+  protected final def foldReservoir[U](prevReservoirSize: Int, doReset: Boolean,
+                                       fullReset: Boolean, process: (U, Row) => U)
                                       (row: Row, sr: StrataReservoir, u: U): U = {
     // imperative code segment below for best efficiency
     var v = u
@@ -292,7 +317,9 @@ abstract class StratifiedSampler(val qcs: Array[Int], val name: String,
       index += 1
     }
     // reset transient data
-    sr.reset(prevReservoirSize, strataReservoirSize, fullReset)
+    if (doReset) {
+      sr.reset(prevReservoirSize, strataReservoirSize, fullReset)
+    }
     v
   }
 }
@@ -499,8 +526,8 @@ final class StratifiedSamplerCached(override val qcs: Array[Int],
     sr
   }
 
-  override def segmentEnd[U](segment: SegmentMap[Row, StrataReservoir], init: U,
-                             process: (U, Row) => U, endBatch: U => U): U = {
+  override protected def segmentEnd[U](segment: SegmentMap[Row, StrataReservoir], init: U,
+                                       process: (U, Row) => U, endBatch: U => U): U = {
     // now check if we need to end the slot
     if (nbatchSamples.get >= (fraction * slotSize.get)) {
       init
