@@ -47,7 +47,7 @@ import org.apache.spark.util.Utils
 import scala.util.Sorting
 
 
-/*--snappychange private[sql]*/ object DataFrame {
+private[sql] object DataFrame {
   def apply(sqlContext: SQLContext, logicalPlan: LogicalPlan): DataFrame = {
     new DataFrame(sqlContext, logicalPlan)
   }
@@ -117,7 +117,7 @@ import scala.util.Sorting
  */
 // TODO: Improve documentation.
 @Experimental
-class DataFrame /*--snappychange private[sql]*/(
+class DataFrame private[sql](
     @transient val sqlContext: SQLContext,
     @DeveloperApi @transient val queryExecution: SQLContext#QueryExecution)
   extends RDDApi[Row] with Serializable {
