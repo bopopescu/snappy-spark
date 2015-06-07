@@ -203,30 +203,38 @@ private[spark] class MultiColumnOpenHashMap[@specialized(Long, Int, Double) V: C
    * If the key doesn't exist yet in the hash map, set its value to
    * defaultValue; otherwise, set its value to mergeValue(oldValue).
    *
-   * @return the newly updated value.
+   * @return true if new value was added, false if it was merged and null
+   *         if the default/merge calls returned null and nothing was done
    */
   override def changeValue(r: Row, hash: Int,
-                           change: ChangeValue[Row, V]): Boolean = {
+                           change: ChangeValue[Row, V]): Option[Boolean] = {
     if (r != null) {
       val keySet = _keySet
       val pos = keySet.addWithoutResize(r, hash)
       if ((pos & MultiColumnOpenHashSet.NONEXISTENCE_MASK) != 0) {
-        _values(pos & MultiColumnOpenHashSet.POSITION_MASK) =
-          change.defaultValue(r)
-        keySet.rehashIfNeeded(r, grow, move)
-        true
+        val v = change.defaultValue(r)
+        if (v != null) {
+          _values(pos & MultiColumnOpenHashSet.POSITION_MASK) = v
+          keySet.rehashIfNeeded(r, grow, move)
+          SegmentMap.TRUE_OPTION
+        }
+        else None
       } else {
-        _values(pos) = change.mergeValue(r, _values(pos))
-        false
+        val v = change.mergeValue(r, _values(pos))
+        if (v != null) {
+          _values(pos) = v
+          SegmentMap.FALSE_OPTION
+        }
+        else None
       }
     } else {
       if (noNullValue) {
         noNullValue = false
         nullValue = change.defaultValue(r)
-        true
+        SegmentMap.TRUE_OPTION
       } else {
         nullValue = change.mergeValue(r, nullValue)
-        false
+        SegmentMap.FALSE_OPTION
       }
     }
   }

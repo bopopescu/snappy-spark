@@ -47,12 +47,15 @@ private[sql] class ConcurrentSegmentedHashMap[K, V, M <: SegmentMap[K, V] : Clas
   require(segmentCreator != null,
     "ConcurrentSegmentedHashMap: null segmentCreator")
 
+  private def initSegmentCapacity(nsegs: Int) =
+    math.max(2, SegmentMap.nextPowerOf2(initialSize / nsegs))
+
   private val _segments: Array[M] = {
     val nsegs = math.min(concurrency, 1 << 16)
     val segs = new Array[M](nsegs)
     // calculate the initial capacity of each segment
-    val segCapacity = math.max(2, SegmentMap.nextPowerOf2(initialSize / nsegs))
-    segs.indices.foreach(segs(_) = segmentCreator(segCapacity, loadFactor))
+    segs.indices.foreach(segs(_) = segmentCreator(initSegmentCapacity(nsegs),
+      loadFactor))
     segs
   }
   private val _size = new AtomicLong(0)
@@ -141,14 +144,14 @@ private[sql] class ConcurrentSegmentedHashMap[K, V, M <: SegmentMap[K, V] : Clas
     val seg = segmentFor(hash)
 
     val lock = seg.writeLock
-    var added = false
+    var added: Option[Boolean] = None
     lock.lock()
     try {
       added = seg.changeValue(k, hash, change)
     } finally {
       lock.unlock()
     }
-    if (added) _size.incrementAndGet()
+    if (added.isDefined && added.get) _size.incrementAndGet()
   }
 
   final def bulkChangeValues(ks: TraversableOnce[K],
@@ -182,7 +185,7 @@ private[sql] class ConcurrentSegmentedHashMap[K, V, M <: SegmentMap[K, V] : Clas
 
     // now lock segments one by one and then apply changes for all keys
     // of the locked segment
-    var added = 0
+    var numAdded = 0
     // shuffle the indexes to minimize segment thread contention
     Random.shuffle[Int, IndexedSeq](0 until nsegs).foreach { i =>
       val keys = groupedKeys(i)
@@ -193,12 +196,29 @@ private[sql] class ConcurrentSegmentedHashMap[K, V, M <: SegmentMap[K, V] : Clas
         val lock = seg.writeLock
         lock.lock()
         try {
+          var added: Option[Boolean] = None
           var idx = 0
           do {
-            if (seg.changeValue(keys(idx), hashes(idx), change)) {
-              added += 1
+            added = seg.changeValue(keys(idx), hashes(idx), change)
+            if (added.isEmpty) {
+              // indicates that loop must be broken immediately
+              lock.unlock()
+              try {
+                if (change.segmentAbort(seg)) {
+                  // break out of loop when segmentAbort returns true
+                  idx = nhashes
+                }
+                else {
+                  idx += 1
+                }
+              } finally {
+                lock.lock()
+              }
             }
-            idx += 1
+            else {
+              if (added.get) numAdded += 1
+              idx += 1
+            }
           } while (idx < nhashes)
         } finally {
           lock.unlock()
@@ -207,12 +227,10 @@ private[sql] class ConcurrentSegmentedHashMap[K, V, M <: SegmentMap[K, V] : Clas
         change.segmentEnd(seg)
       }
     }
-    if (added > 0) _size.addAndGet(added)
+    if (numAdded > 0) _size.addAndGet(numAdded)
   }
 
-  def foldSegments[U](init: U)(f: (U, M) => U): U = {
-    _segments.foldLeft(init)(f)
-  }
+  def foldSegments[U](init: U)(f: (U, M) => U): U = _segments.foldLeft(init)(f)
 
   def foldRead[U](init: U)(f: (K, V, U) => U): U = {
     _segments.foldLeft(init) { (v, seg) =>
@@ -230,24 +248,29 @@ private[sql] class ConcurrentSegmentedHashMap[K, V, M <: SegmentMap[K, V] : Clas
     }
   }
 
-  def readLock[U](f: (Seq[M]) => U): U = {
+  def readLock[U](f: (Array[M]) => U): U = {
     val segments = wrapRefArray(_segments)
     segments.foreach(_.readLock.lock())
     try {
-      f(segments)
+      f(_segments)
     } finally {
       segments.foreach(_.readLock.unlock())
     }
   }
 
-  def writeLock[U](f: (Seq[M]) => U): U = {
+  def writeLock[U](f: Array[M] => U): U = {
     val segments = wrapRefArray(_segments)
     segments.foreach(_.writeLock.lock())
     try {
-      f(segments)
+      f(_segments)
     } finally {
       segments.foreach(_.writeLock.unlock())
     }
+  }
+
+  def clear(): Unit = writeLock { segs =>
+    segs.indices.foreach(segs(_) =
+      segmentCreator(initSegmentCapacity(segs.length), loadFactor))
   }
 
   final def size = _size.get
@@ -258,7 +281,7 @@ private[sql] class ConcurrentSegmentedHashMap[K, V, M <: SegmentMap[K, V] : Clas
     val size = this.size
     if (size <= Int.MaxValue) {
       val buffer = new mutable.ArrayBuffer[(K, V)](size.toInt)
-      foldRead[Unit](){ (k, v, u) => buffer += ((k, v)) }
+      foldRead[Unit]() { (k, v, u) => buffer += ((k, v)) }
       buffer
     }
     else {
@@ -271,7 +294,7 @@ private[sql] class ConcurrentSegmentedHashMap[K, V, M <: SegmentMap[K, V] : Clas
     val size = this.size
     if (size <= Int.MaxValue) {
       val buffer = new mutable.ArrayBuffer[V](size.toInt)
-      foldRead[Unit](){ (k, v, u) => buffer += v }
+      foldRead[Unit]() { (k, v, u) => buffer += v }
       buffer
     }
     else {

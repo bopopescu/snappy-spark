@@ -30,14 +30,13 @@ trait SegmentMap[K, V] extends ReentrantReadWriteLock {
 
   def isEmpty: Boolean
 
-  private[sql] def contains(k: K, hash: Int): Boolean
+  def contains(k: K, hash: Int): Boolean
 
-  private[sql] def apply(k: K, hash: Int): V
+  def apply(k: K, hash: Int): V
 
-  private[sql] def update(k: K, hash: Int, v: V): Boolean
+  def update(k: K, hash: Int, v: V): Boolean
 
-  private[sql] def changeValue(k: K, hash: Int,
-                               change: ChangeValue[K, V]): Boolean
+  def changeValue(k: K, hash: Int, change: ChangeValue[K, V]): Option[Boolean]
 }
 
 trait ChangeValue[K, V] {
@@ -47,11 +46,16 @@ trait ChangeValue[K, V] {
   def mergeValue(k: K, v: V): V
 
   def segmentEnd(segment: SegmentMap[K, V]): Unit
+
+  def segmentAbort(segment: SegmentMap[K, V]): Boolean
 }
 
 object SegmentMap {
 
   val DEFAULT_LOAD_FACTOR = 0.7
+
+  val TRUE_OPTION = Some(true)
+  val FALSE_OPTION = Some(false)
 
   def nextPowerOf2(n: Int): Int = {
     val highBit = Integer.highestOneBit(n)

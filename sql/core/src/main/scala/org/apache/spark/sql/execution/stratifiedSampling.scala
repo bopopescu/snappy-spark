@@ -4,16 +4,16 @@ import java.util.Random
 import java.util.concurrent.atomic.{AtomicInteger, AtomicLong}
 import java.util.concurrent.locks.ReentrantReadWriteLock
 
-import org.apache.spark.Logging
-import org.apache.spark.rdd.{PartitionwiseSampledRDD, RDD}
+import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.expressions.{Attribute, EmptyRow}
 import org.apache.spark.sql.collection._
-import org.apache.spark.sql.types.{DataType, StructType}
+import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.util.random.RandomSampler
+import org.apache.spark.{Logging, Partition, SparkEnv, TaskContext}
 
 import scala.collection.mutable
-import scala.collection.mutable.ArrayBuffer
+import scala.language.reflectiveCalls
 import scala.util.Sorting
 
 /**
@@ -27,9 +27,75 @@ case class StratifiedSample(options: Map[String, Any], tableSchema: StructType,
 
   override def output: Seq[Attribute] = child.output
 
-  protected override def doExecute(): RDD[Row] = {
-    new PartitionwiseSampledRDD[Row, Row](child.execute(),
-      StratifiedSampler(options, tableSchema, cached = false), true)
+  protected override def doExecute(): RDD[Row] =
+    new StratifiedSampledRDD(child.execute(), options, tableSchema)
+}
+
+final class SamplePartition(val parent: Partition, val idx: Int,
+                            val host: String)
+  extends Partition with Serializable {
+
+  override val index = idx
+
+  override def toString = s"SamplePartition($idx, $host)"
+}
+
+final class StratifiedSampledRDD(@transient parent: RDD[Row],
+                                 options: Map[String, Any], schema: StructType)
+  extends RDD[Row](parent) with Serializable {
+
+  val parentPartitions = parent.partitions
+  var hostPartitions: Map[String, Array[Int]] = _
+
+  override def getPartitions: Array[Partition] = {
+    this.id
+    val peers = SparkEnv.get.blockManager.master.getMemoryStatus.keySet.map(
+      _.host)
+    val npeers = peers.size
+    if (npeers > 0) {
+      val numberedPeers = peers.toArray
+      // split partitions executor-wise in round-robin so we know
+      // how many partitions were assigned to each executor and wait
+      // on each executor accordingly to drain the remaining cache
+      val partitions = parentPartitions.indices.map { index =>
+        val ppart = parentPartitions(index)
+        val plocs = firstParent[Row].preferredLocations(ppart)
+        // get the first preferred location in the peers, else if none
+        // found then use default round-robin policy among peers
+        plocs.collectFirst { case host if peers contains host =>
+          new SamplePartition(ppart, index, host)
+        }.getOrElse(new SamplePartition(ppart, index,
+          numberedPeers(index % npeers)))
+      }
+      hostPartitions = partitions.groupBy(_.host).map {
+        case (k, v) => (k, v.map(_.idx).sorted.toArray)
+      }
+      partitions.toArray[Partition]
+    }
+    else {
+      Array.empty[Partition]
+    }
+  }
+
+  override def compute(split: Partition,
+                       context: TaskContext): Iterator[Row] = {
+    val blockManager = SparkEnv.get.blockManager
+    val part = split.asInstanceOf[SamplePartition]
+    assert(blockManager.blockManagerId.host equals part.host)
+    val hostParts = hostPartitions(part.host)
+    val sampler = StratifiedSampler(options, "_rdd_" + id, schema,
+      cached = true)
+    val numSamplers = hostParts.length
+    // TODO: need to fix numSamplers mechanism for node/partition failures
+    sampler.numSamplers.compareAndSet(0, numSamplers)
+    sampler.sample(firstParent[Row].iterator(part.parent, context),
+      // if we are the last partition on this host, then wait for all
+      // others to finish and then drain the remaining cache
+      part.idx == hostParts(numSamplers - 1))
+  }
+
+  override def getPreferredLocations(split: Partition): Seq[String] = {
+    Seq(split.asInstanceOf[SamplePartition].host)
   }
 }
 
@@ -37,6 +103,9 @@ object StratifiedSampler {
 
   private val globalMap = new mutable.HashMap[String, StratifiedSampler]
   private val mapLock = new ReentrantReadWriteLock
+
+  val BUFSIZE = 1000
+  val EMPTY_RESERVOIR = Array.empty[Row]
 
   implicit class StringExtensions(val s: String) extends AnyVal {
     def ci = new {
@@ -74,7 +143,7 @@ object StratifiedSampler {
   def qcsOf(qa: Array[String], schema: StructType): Array[Int] =
     qcsOf(qa, schema.fieldNames)
 
-  def apply(options: Map[String, Any],
+  def apply(options: Map[String, Any], nameSuffix: String,
             schema: StructType, cached: Boolean): StratifiedSampler = {
     val nameTest = "name".ci
     val qcsTest = "qcs".ci
@@ -86,12 +155,13 @@ object StratifiedSampler {
     val timeIntervalSpec = "([0-9]+)(s|m|h)".r
     val cols = schema.fieldNames
 
+    val defaultStrataSize = 50
     // Using foldLeft to read key-value pairs and build into the result
     // tuple of (qcs, fraction, strataReservoirSize) like an aggregate.
     // This "aggregate" simply keeps the last values for the corresponding
     // keys as found when folding the map.
     val (qcs, nm, fraction, strataSize, tsCol, timeInterval) = options.foldLeft(
-      Array.emptyIntArray, "", 0.0, 0, -1, 0) {
+      Array.emptyIntArray, "", 0.0, defaultStrataSize, -1, 0) {
       case ((qs, n, fr, sz, ts, ti), (opt, optV)) =>
         opt match {
           case qcsTest() => optV match {
@@ -147,19 +217,16 @@ object StratifiedSampler {
         }
     }
 
-    if (cached && nm.nonEmpty) {
-      lookupOrAdd(qcs, nm, fraction, strataSize, tsCol, timeInterval, schema)
+    val name = nm + nameSuffix
+    if (cached && name.nonEmpty) {
+      lookupOrAdd(qcs, name, fraction, strataSize, tsCol, timeInterval, schema)
     }
     else {
-      newSampler(qcs, nm, fraction, strataSize,
-        tsCol, timeInterval, schema, cached = false)
+      newSampler(qcs, name, fraction, strataSize, tsCol, timeInterval, schema)
     }
   }
 
   def apply(name: String): Option[StratifiedSampler] = {
-    // not using getOrElse in one shot to allow taking only read lock
-    // for the common case, then release it and take write lock if new
-    // sampler has to be added
     SegmentMap.lock(mapLock.readLock) {
       globalMap.get(name)
     }
@@ -177,11 +244,11 @@ object StratifiedSampler {
     } match {
       case Some(sampler) => sampler
       case None =>
-        val sampler = newSampler(qcs, name, fraction, strataSize,
-          tsCol, timeInterval, schema, cached = true)
         // insert into global map but double-check after write lock
         SegmentMap.lock(mapLock.writeLock) {
           globalMap.getOrElse(name, {
+            val sampler = newSampler(qcs, name, fraction, strataSize,
+              tsCol, timeInterval, schema)
             globalMap(name) = sampler
             sampler
           })
@@ -196,59 +263,49 @@ object StratifiedSampler {
 
   private def newSampler(qcs: Array[Int], name: String, fraction: Double,
                          strataSize: Int, tsCol: Int, timeInterval: Int,
-                         schema: StructType,
-                         cached: Boolean): StratifiedSampler = {
+                         schema: StructType): StratifiedSampler = {
     if (qcs.isEmpty)
       throw new AnalysisException("StratifiedSampler: QCS is empty")
     else if (tsCol >= 0 && timeInterval <= 0)
       throw new AnalysisException("StratifiedSampler: no timeInterval for " +
         "timeSeriesColumn=" + schema(tsCol).name)
     else if (fraction > 0.0)
-      new StratifiedSamplerCached(qcs, name, schema, cached, new AtomicInteger(
-        math.max(strataSize, 50)), fraction, tsCol, timeInterval)
+      new StratifiedSamplerCached(qcs, name, schema,
+        new AtomicInteger(strataSize), fraction, tsCol, timeInterval)
     else if (strataSize > 0)
-      new StratifiedSamplerReservoir(qcs, name, schema, cached, strataSize)
+      new StratifiedSamplerReservoir(qcs, name, schema, strataSize)
     else throw new AnalysisException("StratifiedSampler: " +
       s"'fraction'=$fraction 'strataReservoirSize'=$strataSize")
+  }
+
+  def compareOrderAndSet(atomicVal: AtomicLong, compareTo: Long,
+                         getMax: Boolean): Boolean = {
+    while (true) {
+      val v = atomicVal.get
+      val cmp = if (getMax) compareTo > v else compareTo < v
+      if (cmp) {
+        if (atomicVal.compareAndSet(v, compareTo)) {
+          return true
+        }
+      } else return false
+    }
+    false
   }
 }
 
 abstract class StratifiedSampler(val qcs: Array[Int], val name: String,
-                                 val schema: StructType, val cached: Boolean)
-  extends RandomSampler[Row, Row]
-  with ChangeValue[Row, StrataReservoir] with Logging {
-
-  self =>
+                                 val schema: StructType)
+  extends RandomSampler[Row, Row] with Logging {
 
   type ReservoirSegment = MultiColumnOpenHashMap[StrataReservoir]
-
-  protected final class ProcessRows[U](val process: (U, Row) => U,
-                                       val endBatch: U => U, var aggregate: U)
-    extends ChangeValue[Row, StrataReservoir] {
-
-    override def defaultValue(row: Row): StrataReservoir = {
-      self.defaultValue(row)
-    }
-
-    override def mergeValue(row: Row, sr: StrataReservoir): StrataReservoir = {
-      self.mergeValue(row, sr)
-    }
-
-    override def segmentEnd(segment: SegmentMap[Row, StrataReservoir]): Unit = {
-      aggregate = self.segmentEnd(segment, aggregate, process, endBatch)
-    }
-  }
 
   /**
    * Map of each strata key (i.e. a unique combination of values of columns
    * in qcs) to related metadata and reservoir
    */
   protected final val stratas = {
+    val types = qcs.map(schema(_).dataType)
     val numColumns = qcs.length
-    val types: Array[DataType] = new Array[DataType](numColumns)
-    0 until numColumns foreach { i =>
-      types(i) = schema(qcs(i)).dataType
-    }
     val columnHandler = MultiColumnOpenHashSet.newColumnHandler(qcs,
       types, numColumns)
     val hasher = { row: Row => columnHandler.hash(row) }
@@ -257,13 +314,10 @@ abstract class StratifiedSampler(val qcs: Array[Int], val name: String,
         numColumns, initialCapacity, loadFactor), hasher)
   }
 
-  /**
-   * Random number generator for sampling.
-   */
+  /** Random number generator for sampling. */
   protected final val rng = new Random()
 
-  /** Keeps track of the maximum number of samples in a strata seen so far */
-  protected val nmaxSamples = new AtomicInteger
+  private[sql] val numSamplers = new AtomicInteger
 
   override def setSeed(seed: Long) {
     rng.setSeed(seed)
@@ -274,11 +328,16 @@ abstract class StratifiedSampler(val qcs: Array[Int], val name: String,
   def append[U](rows: Iterator[Row], init: U, process: (U, Row) => U,
                 endBatch: U => U): U
 
+  override def sample(items: Iterator[Row]): Iterator[Row] =
+    sample(items, flush = true)
+
+  def sample(items: Iterator[Row], flush: Boolean): Iterator[Row]
+
   def iterator: Iterator[Row] = {
+    val sampleBuffer = new mutable.ArrayBuffer[Row](StratifiedSampler.BUFSIZE)
     stratas.foldSegments(Iterator[Row]()) { (iter, seg) =>
       iter ++ {
-        val sampleBuffer = new ArrayBuffer[Row](1000)
-        //sampleBuffer.clear()
+        if (sampleBuffer.nonEmpty) sampleBuffer.clear()
         SegmentMap.lock(seg.readLock()) {
           seg.fold[Unit]()(foldReservoir(0, false, false, { (_, row) =>
             sampleBuffer += row
@@ -289,26 +348,19 @@ abstract class StratifiedSampler(val qcs: Array[Int], val name: String,
     }
   }
 
-  override def segmentEnd(segment: SegmentMap[Row, StrataReservoir]): Unit = {}
-
-  protected def segmentEnd[U](segment: SegmentMap[Row, StrataReservoir], init: U,
-                              process: (U, Row) => U, endBatch: U => U): U = init
-
-  /** return a copy of the StratifiedSampler object */
-  override def clone: StratifiedSampler =
-    throw new NotImplementedError("clone() is not implemented.")
-
-  protected final def foldSegment[U](prevReservoirSize: Int, fullReset: Boolean,
-                                     process: (U, Row) => U)
-                                    (u: U, seg: ReservoirSegment): U = {
-    seg.fold(u)(foldReservoir(prevReservoirSize, true, fullReset, process))
+  protected final def foldDrainSegment[U](prevReservoirSize: Int,
+                                          fullReset: Boolean,
+                                          process: (U, Row) => U)
+                                         (init: U, seg: ReservoirSegment): U = {
+    seg.fold(init)(foldReservoir(prevReservoirSize, doReset = true,
+      fullReset, process))
   }
 
-  protected final def foldReservoir[U](prevReservoirSize: Int, doReset: Boolean,
-                                       fullReset: Boolean, process: (U, Row) => U)
-                                      (row: Row, sr: StrataReservoir, u: U): U = {
+  protected final def foldReservoir[U]
+  (prevReservoirSize: Int, doReset: Boolean, fullReset: Boolean,
+   process: (U, Row) => U)(row: Row, sr: StrataReservoir, init: U): U = {
     // imperative code segment below for best efficiency
-    var v = u
+    var v = init
     val reservoir = sr.reservoir
     val nsamples = sr.reservoirSize
     var index = 0
@@ -322,6 +374,11 @@ abstract class StratifiedSampler(val qcs: Array[Int], val name: String,
     }
     v
   }
+
+  protected def waitForSamplers(waitUntil: Int): Unit =
+    numSamplers.synchronized {
+      while (numSamplers.get > waitUntil) numSamplers.wait(500)
+    }
 }
 
 // TODO: optimize by having metadata as multiple columns like key;
@@ -363,6 +420,8 @@ final class StrataReservoir(var totalSamples: Int, var batchTotalSize: Int,
     }
   }
 
+  // TODO: need to add update of reservoirSize dynamically as per average
+  // TODO: total cache drained since the last fullReset
   def reset(prevReservoirSize: Int, newReservoirSize: Int,
             fullReset: Boolean): Unit = {
     if (newReservoirSize > 0) {
@@ -375,20 +434,31 @@ final class StrataReservoir(var totalSamples: Int, var batchTotalSize: Int,
         weightage = 0.0
         prevShortFall = 0
       } else {
-        // first update the shortfall for next round
-        // if it has not seen much data for sometime and has fallen behind
+        // First update the shortfall for next round.
+        // If it has not seen much data for sometime and has fallen behind
         // a lot, then it is likely gone and there is no point in increasing
         // shortfall indefinitely (else it will over sample if seen in future)
-        if (newReservoirSize <= reservoirSize ||
+        // [sumedh] Above observation does not actually hold. Two cases:
+        // 1) timeInterval is defined: in this case we better keep the shortFall
+        //    till the end of timeInterval when it shall be reset in any case
+        // 2) timeInterval is not defined: this is a case of non-time series
+        //    data where we should keep shortFall till the end of data
+        /*
+        if (prevReservoirSize <= reservoirSize ||
           prevShortFall <= (prevReservoirSize + reservoirSize)) {
           prevShortFall += (prevReservoirSize - reservoirSize)
         }
+        */
+        prevShortFall += (prevReservoirSize - reservoirSize)
       }
       // shrink reservoir back to strataReservoirSize if required to avoid
       // growing possibly without bound (in case some strata consistently
       //   gets small number of total rows less than sample size)
       if (reservoir.length == newReservoirSize) {
         StratifiedSampler.fillArray(reservoir, EmptyRow, 0, reservoirSize)
+      } else if (reservoirSize <= 2 && newReservoirSize > 3) {
+        // empty the reservoir since it did not receive much data in last round
+        reservoir = StratifiedSampler.EMPTY_RESERVOIR
       } else {
         reservoir = new Array[Row](newReservoirSize)
       }
@@ -401,18 +471,21 @@ final class StrataReservoir(var totalSamples: Int, var batchTotalSize: Int,
 final class StratifiedSamplerCached(override val qcs: Array[Int],
                                     override val name: String,
                                     override val schema: StructType,
-                                    override val cached: Boolean,
                                     private val cacheSize: AtomicInteger,
                                     val fraction: Double,
                                     val timeSeriesColumn: Int,
                                     val timeInterval: Int)
-  extends StratifiedSampler(qcs, name, schema, cached) {
+  extends StratifiedSampler(qcs, name, schema) {
 
-  val nbatchSamples, slotSize = new AtomicInteger
+  self =>
+
+  private val nbatchSamples, slotSize = new AtomicInteger
+  /** Keeps track of the maximum number of samples in a strata seen so far */
+  private val maxSamples = new AtomicLong
   // initialize timeSlotStart to MAX so that it will always be set first
   // time around for the slot (since every valid time will be less)
-  val timeSlotStart = new AtomicLong(Long.MaxValue)
-  val timeSlotEnd = new AtomicLong
+  private val timeSlotStart = new AtomicLong(Long.MaxValue)
+  private val timeSlotEnd = new AtomicLong
 
   private def tsColumnTime(row: Row): Long = {
     if (timeSeriesColumn >= 0) {
@@ -432,116 +505,103 @@ final class StratifiedSamplerCached(override val qcs: Array[Int],
   private def setTimeSlot(row: Row) = {
     val timeSlot = tsColumnTime(row)
 
-    var done = false
-    do {
-      val tsStart = timeSlotStart.get
-      if (timeSlot < tsStart) {
-        done = timeSlotStart.compareAndSet(tsStart, timeSlot)
-      } else {
-        done = true
-      }
-    } while (!done)
-
-    done = false
-    do {
-      val tsEnd = timeSlotEnd.get
-      if (timeSlot > tsEnd) {
-        done = timeSlotEnd.compareAndSet(tsEnd, timeSlot)
-      } else {
-        done = true
-      }
-    } while (!done)
+    StratifiedSampler.compareOrderAndSet(timeSlotStart, timeSlot,
+      getMax = false)
+    StratifiedSampler.compareOrderAndSet(timeSlotEnd, timeSlot,
+      getMax = true)
   }
 
-  override def defaultValue(row: Row) = {
-    val cacheSize = this.cacheSize.get
-    val reservoir = new Array[Row](cacheSize)
-    reservoir(0) = row.copy()
-    StratifiedSampler.fillArray(reservoir, EmptyRow, 1, cacheSize)
-    val sr = new StrataReservoir(1, 1, 0.0, reservoir,
-      1, math.max(0, nmaxSamples.get - cacheSize))
-    nmaxSamples.compareAndSet(0, 1)
-    // update timeSlot start and end
-    if (timeInterval > 0) {
-      setTimeSlot(row)
+  private final class ProcessRows[U](val process: (U, Row) => U,
+                                     val endBatch: U => U, var result: U)
+    extends ChangeValue[Row, StrataReservoir] {
+
+    override def defaultValue(row: Row): StrataReservoir = {
+      val cacheSize = self.cacheSize.get
+      val reservoir = new Array[Row](cacheSize)
+      reservoir(0) = row.copy()
+      StratifiedSampler.fillArray(reservoir, EmptyRow, 1, cacheSize)
+      // for time-series data don't start with shortfall since this indicates
+      // that a new stratum has appeared which can remain under-sampled for
+      // a while till it doesn't get enough rows
+      val initShortFall = if (timeInterval > 0) {
+        // update timeSlot start and end
+        setTimeSlot(row)
+        0
+      } else math.max(0, maxSamples.get - cacheSize).toInt
+      val sr = new StrataReservoir(1, 1, 0.0, reservoir,
+        1, initShortFall)
+      maxSamples.compareAndSet(0, 1)
+      nbatchSamples.incrementAndGet()
+      slotSize.incrementAndGet()
+      sr
     }
-    nbatchSamples.incrementAndGet()
-    slotSize.incrementAndGet()
-    sr
-  }
 
-  override def mergeValue(row: Row, sr: StrataReservoir): StrataReservoir = {
-    // else update meta information in current strata
-    sr.batchTotalSize += 1
-    val reservoirCapacity = cacheSize.get + sr.prevShortFall
-    if (sr.reservoirSize >= reservoirCapacity) {
-      val rnd = rng.nextInt(sr.batchTotalSize)
-      // pick up this row with probability of reservoirCapacity/totalSize
-      if (rnd < reservoirCapacity) {
-        // replace a random row in reservoir
-        sr.reservoir(rng.nextInt(reservoirCapacity)) = row.copy()
+    override def mergeValue(row: Row, sr: StrataReservoir): StrataReservoir = {
+      // else update meta information in current strata
+      sr.batchTotalSize += 1
+      val reservoirCapacity = cacheSize.get + sr.prevShortFall
+      if (sr.reservoirSize >= reservoirCapacity) {
+        val rnd = rng.nextInt(sr.batchTotalSize)
+        // pick up this row with probability of reservoirCapacity/totalSize
+        if (rnd < reservoirCapacity) {
+          // replace a random row in reservoir
+          sr.reservoir(rng.nextInt(reservoirCapacity)) = row.copy()
+          // update timeSlot start and end
+          if (timeInterval > 0) {
+            setTimeSlot(row)
+          }
+        }
+        if (nbatchSamples.get >= (fraction * slotSize.incrementAndGet())) {
+          sr
+        }
+        else null
+      } else {
+        // if reservoir has empty slots then fill them up first
+        val reservoirLen = sr.reservoir.length
+        if (reservoirLen <= sr.reservoirSize) {
+          // new size of reservoir will be > reservoirSize given that it
+          // increases only in steps of 1 and the expression
+          // reservoirLen + (reservoirLen >>> 1) + 1 will certainly be
+          // greater than reservoirLen
+          val newReservoir = new Array[Row](math.max(math.min(reservoirCapacity,
+            reservoirLen + (reservoirLen >>> 1) + 1), cacheSize.get))
+          StratifiedSampler.fillArray(newReservoir, EmptyRow,
+            reservoirLen, newReservoir.length)
+          System.arraycopy(sr.reservoir, 0, newReservoir,
+            0, reservoirLen)
+          sr.reservoir = newReservoir
+        }
+        sr.reservoir(sr.reservoirSize) = row.copy()
+        sr.reservoirSize += 1
+        sr.totalSamples += 1
+
         // update timeSlot start and end
         if (timeInterval > 0) {
           setTimeSlot(row)
         }
-      }
-    } else {
-      // if reservoir has empty slots then fill them up first
-      val reservoirLen = sr.reservoir.length
-      if (reservoirLen <= sr.reservoirSize) {
-        // new size of reservoir will be > reservoirSize given that it
-        // increases only in steps of 1 and the expression
-        // reservoirLen + (reservoirLen >>> 1) + 1 will certainly be
-        // greater than reservoirLen
-        val newReservoir = new Array[Row](math.min(reservoirCapacity,
-          reservoirLen + (reservoirLen >>> 1) + 1))
-        StratifiedSampler.fillArray(newReservoir, EmptyRow,
-          reservoirLen, newReservoir.length)
-        System.arraycopy(sr.reservoir, 0, newReservoir,
-          0, reservoirLen)
-        sr.reservoir = newReservoir
-      }
-      sr.reservoir(sr.reservoirSize) = row.copy()
-      sr.reservoirSize += 1
-      sr.totalSamples += 1
 
-      // update timeSlot start and end
-      if (timeInterval > 0) {
-        setTimeSlot(row)
+        StratifiedSampler.compareOrderAndSet(maxSamples, sr.totalSamples,
+          getMax = true)
+        nbatchSamples.incrementAndGet()
+        slotSize.incrementAndGet()
+        sr
       }
-
-      var done = false
-      val ssamples = sr.totalSamples
-      do {
-        val maxSamples = nmaxSamples.get
-        if (ssamples > maxSamples) {
-          done = nmaxSamples.compareAndSet(maxSamples, ssamples)
-        } else {
-          done = true
-        }
-      } while (!done)
-      nbatchSamples.incrementAndGet()
     }
-    slotSize.incrementAndGet()
-    sr
-  }
 
-  override protected def segmentEnd[U](segment: SegmentMap[Row, StrataReservoir], init: U,
-                                       process: (U, Row) => U, endBatch: U => U): U = {
-    // now check if we need to end the slot
-    if (nbatchSamples.get >= (fraction * slotSize.get)) {
-      init
-    } else stratas.synchronized {
-      // top-level synchronized above to avoid possible deadlocks with
-      // segment locks if two threads are trying to drain cache concurrently
+    override def segmentEnd(seg: SegmentMap[Row, StrataReservoir]): Unit = {}
 
-      // reset batch counters
-      val nsamples = nbatchSamples.get
-      if (nsamples > 0 && nsamples < (fraction * slotSize.get)) {
-        flushCache(init, process, endBatch)
-      } else {
-        init
+    override def segmentAbort(seg: SegmentMap[Row, StrataReservoir]): Boolean = {
+      stratas.synchronized {
+        // top-level synchronized above to avoid possible deadlocks with
+        // segment locks if two threads are trying to drain cache concurrently
+
+        // reset batch counters
+        val nsamples = nbatchSamples.get
+        if (nsamples > 0 && nsamples < (fraction * slotSize.get)) {
+          result = flushCache(result, process, endBatch)
+        }
       }
+      false
     }
   }
 
@@ -552,19 +612,30 @@ final class StratifiedSamplerCached(override val qcs: Array[Int],
     stratas.writeLock { segs =>
       nbatchSamples.set(0)
       slotSize.set(0)
-      // in case the current timeSlot is over, reset nmaxSamples
+      // in case the current timeSlot is over, reset maxSamples
       // (thus causing shortFall to clear up)
       val tsEnd = timeSlotEnd.get
       val fullReset = (tsEnd != 0) && ((tsEnd - timeSlotStart.get) >=
         (timeInterval.toLong * 1000L))
       if (fullReset) {
-        nmaxSamples.set(0)
+        maxSamples.set(0)
         // reset timeSlot start and end
         timeSlotStart.set(Long.MaxValue)
         timeSlotEnd.set(0)
       }
-      val processSegment = foldSegment(cacheSize.get, fullReset, process) _
-      endBatch(segs.foldLeft(init)(processSegment))
+      val processSegment = foldDrainSegment(cacheSize.get, fullReset, process) _
+      val result = endBatch(segs.foldLeft(init)(processSegment))
+
+      // if more than 50% of keys are empty, then clear the whole map
+      val emptyRows = segs.foldLeft(0) { (result, seg) =>
+        seg.fold(result) { (row, sr, empty) =>
+          if (sr.reservoir.isEmpty) empty + 1 else empty
+        }
+      }
+      if (stratas.size < (emptyRows << 1)) {
+        stratas.clear()
+      }
+      result
     }
   }
 
@@ -575,96 +646,64 @@ final class StratifiedSamplerCached(override val qcs: Array[Int],
     if (rows.hasNext) {
       val processedResult = new ProcessRows(process, endBatch, init)
       stratas.bulkChangeValues(rows, processedResult)
-      processedResult.aggregate
+      processedResult.result
     } else init
   }
 
-  override def sample(items: Iterator[Row]): Iterator[Row] = {
+  override def sample(items: Iterator[Row], flush: Boolean): Iterator[Row] = {
     // break up input into batches of "batchSize" and bulk sample each batch
-    new Iterator[Row] {
-      val rows = items
-      var hasItems = rows.hasNext
-      var mapIterator: Iterator[Row] = Iterator.empty
+    val batchSize = StratifiedSampler.BUFSIZE
+    val sampleBuffer = new mutable.ArrayBuffer[Row](math.min(batchSize,
+      (batchSize * fraction * 10).toInt))
 
-      val batchSize = 1000
-      val buffer = new mutable.ArrayBuffer[Row](batchSize)
-      var bufferLen = 0
-      val sbufSize = math.min(batchSize, (batchSize * fraction * 10).toInt)
-      val sampleBuffer = new mutable.ArrayBuffer[Row](sbufSize)
-      var finished = false
-
-      private def buildSampleIterator(): Iterator[Row] = {
-        val sampleBuffer = this.sampleBuffer
-        if (sampleBuffer.nonEmpty) sampleBuffer.clear()
-        // bulk sample the buffer
-        append[Unit](buffer.iterator, (), {
-          (u, sampledRow) => sampleBuffer += sampledRow; u
+    def sampleIterator(iter: Iterator[Row],
+                       doFlush: Boolean): Iterator[Row] = {
+      val sbuffer = sampleBuffer
+      if (sbuffer.nonEmpty) sbuffer.clear()
+      // bulk sample the buffer
+      append[Unit](iter, (), { (_, sampledRow) =>
+        sbuffer += sampledRow; ()
+      }, identity)
+      if (doFlush) {
+        flushCache[Unit]((), { (_, sampledRow) =>
+          sampleBuffer += sampledRow; ()
         }, identity)
-        sampleBuffer.iterator
       }
-
-      override final def hasNext: Boolean = {
-        if (mapIterator.hasNext) {
-          return true
-        }
-        val rows = this.rows
-        val buffer = this.buffer
-        while (hasItems) {
-          val row = rows.next()
-          hasItems = rows.hasNext
-          // now check if we need to end the slot and return current samples
-          if (bufferLen < batchSize) {
-            buffer += row
-            bufferLen += 1
-          }
-          else {
-            mapIterator = buildSampleIterator()
-            buffer.clear()
-            bufferLen = 0
-            if (mapIterator.hasNext) return true
-          }
-        }
-        if (bufferLen > 0) {
-          mapIterator = buildSampleIterator()
-          buffer.clear()
-          bufferLen = 0
-        }
-        if (mapIterator.hasNext) {
-          return true
-        }
-        if (!finished) {
-          finished = true
-          // force flush the cache
-          stratas.synchronized {
-            val sampleBuffer = this.sampleBuffer
-            if (sampleBuffer.nonEmpty) sampleBuffer.clear()
-            flushCache[Unit]((), {
-              (u, sampledRow) => sampleBuffer += sampledRow; u
-            }, identity)
-            mapIterator = sampleBuffer.iterator
-          }
-          mapIterator.hasNext
-        }
-        else false
-      }
-
-      override final def next(): Row = {
-        mapIterator.next()
-      }
+      sbuffer.iterator
     }
+
+    val batchIter = new SlicedIterator(items)
+    new GenerateFlatIterator[Row, Boolean]({ finished =>
+      batchIter.setSlice(0, batchSize)
+      if (batchIter.hasNext) (sampleIterator(batchIter, doFlush = false), false)
+      else if (finished) {
+        // if required notify any other waiting samplers that iteration is done
+        if (numSamplers.decrementAndGet() == 1) numSamplers.synchronized {
+          numSamplers.notifyAll()
+        }
+        // remove sampler used only for DataFrame => DataFrame transformation
+        if (flush) StratifiedSampler.removeSampler(name)
+        (GenerateFlatIterator.TERMINATE, true)
+      }
+      else if (flush) {
+        // wait for all other partitions to flush the cache
+        waitForSamplers(1)
+        (sampleIterator(batchIter, doFlush = true), true)
+      }
+      else (sampleIterator(batchIter, doFlush = false), true)
+    }, false)
   }
 
-  override def clone: StratifiedSamplerCached =
-    new StratifiedSamplerCached(qcs, name, schema, false, cacheSize,
-      fraction, timeSeriesColumn, timeInterval)
+  override def clone: StratifiedSamplerCached = new StratifiedSamplerCached(
+    qcs, name, schema, cacheSize, fraction, timeSeriesColumn, timeInterval)
 }
 
 final class StratifiedSamplerReservoir(override val qcs: Array[Int],
                                        override val name: String,
                                        override val schema: StructType,
-                                       override val cached: Boolean,
                                        private val reservoirSize: Int)
-  extends StratifiedSampler(qcs, name, schema, cached) {
+  extends StratifiedSampler(qcs, name, schema)
+  with ChangeValue[Row, StrataReservoir] {
 
   override def defaultValue(row: Row) = {
     val strataSize = this.reservoirSize
@@ -694,20 +733,23 @@ final class StratifiedSamplerReservoir(override val qcs: Array[Int],
     sr
   }
 
+  override def segmentEnd(segment: SegmentMap[Row, StrataReservoir]): Unit = {}
+
+  override def segmentAbort(segment: SegmentMap[Row, StrataReservoir]) = false
+
   override protected def strataReservoirSize: Int = reservoirSize
 
   override def append[U](rows: Iterator[Row], init: U, process: (U, Row) => U,
                          endBatch: U => U): U = {
     if (rows.hasNext) {
-      val processedResult = new ProcessRows(process, endBatch, init)
-      stratas.bulkChangeValues(rows, processedResult)
-      processedResult.aggregate
-    } else init
+      stratas.bulkChangeValues(rows, this)
+    }
+    init
   }
 
-  override def sample(items: Iterator[Row]): Iterator[Row] = {
+  override def sample(items: Iterator[Row], flush: Boolean): Iterator[Row] = {
     // break up into batches of some size
-    val batchSize = 1000
+    val batchSize = StratifiedSampler.BUFSIZE
     val buffer = new mutable.ArrayBuffer[Row](batchSize)
     items.foreach { row =>
       if (buffer.length < batchSize) {
@@ -723,11 +765,23 @@ final class StratifiedSamplerReservoir(override val qcs: Array[Int],
       append[Unit](buffer.iterator, (), null, null)
     }
 
-    // finally iterate over all the strata reservoirs
-    stratas.toValues.flatMap(_.iterator(reservoirSize,
-      reservoirSize, fullReset = false)).toIterator
+    if (flush) {
+      // iterate over all the strata reservoirs for marked partition
+      waitForSamplers(1)
+      // remove sampler used only for DataFrame => DataFrame transformation
+      if (flush) StratifiedSampler.removeSampler(name)
+      // at this point we don't have a problem with concurrency
+      stratas.toValues.flatMap(_.iterator(reservoirSize,
+        reservoirSize, fullReset = false)).toIterator
+    }
+    else {
+      if (numSamplers.decrementAndGet() == 1) numSamplers.synchronized {
+        numSamplers.notifyAll()
+      }
+      Iterator.empty
+    }
   }
 
   override def clone: StratifiedSamplerReservoir =
-    new StratifiedSamplerReservoir(qcs, name, schema, false, reservoirSize)
+    new StratifiedSamplerReservoir(qcs, name, schema, reservoirSize)
 }
