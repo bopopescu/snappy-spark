@@ -45,12 +45,12 @@ Use this to get a full build with Hive/Thrift support:
 
 build/sbt -Pyarn -Phadoop-2.4 -Dhadoop.version=2.4.1 -Phive -Phive-thriftserver -Dscala-2.11 -DskipTests assembly
 
-Use the spark-build.sh script in scripts directory of this repo which has
+Use the spark-build.sh script in snappy directory of this repo which has
 these arguments by default. Any arguments to the script will be passed
 through to sbt/mvn except for these which are handled by the script:
 
-    -scala-2.11: to build with scala-2.11 (default with sbt)
-    -scala-2.10: to build with scala-2.10 (default with mvn)
+    -scala-2.11: to build with scala-2.11
+    -scala-2.10: to build with scala-2.10 (default)
     -mvn: to build with maven instead of sbt
 
 You need to have maven installed on the system to build with maven but
@@ -70,7 +70,7 @@ build/sbt -Pyarn -Phadoop-2.4 -Dhadoop.version=2.4.1 -Phive -Phive-thriftserver 
 
 OR
 
-spark-build.sh eclipse
+snappy/spark-build.sh -scala-2.11 eclipse
 
 
 To add references to source and javadoc jars, use:
@@ -79,8 +79,9 @@ build/sbt -Pyarn -Phadoop-2.4 -Dhadoop.version=2.4.1 -Phive -Phive-thriftserver 
 
 OR
 
-spark-build.sh "eclipse with-source=true"
+snappy/spark-build.sh -scala-2.11 "eclipse with-source=true"
 
+Scala 2.11 works best with scala IDE, so use that for eclipse.
 Next import the eclipse projects preferably in a fresh workspace
 "File->Import->General->Existing Projects into Workspace". For a start,
 import the following (preferably in that order):
@@ -108,7 +109,8 @@ in the scripts directory of this repository will start a local node with
 6 threads and 3G of memory by default. Any arguments passed to the
 script will override these defaults.
 
-A basic test is checked in tests/src/main/scala/io/snappydata/SparkSQLTest.scala.
+A basic test is checked in tests/src/main/scala/io/snappydata/SparkSQLTest.scala
+in the SnappySparkTools directory of the experiments repository.
 You can just copy the contents of file to spark-shell. Now it also has an sbt
 build configuration that will automatically pull the latest snappy-spark
 SNAPSHOT build. The data file referred in that test is 2007 and 2008 airline
