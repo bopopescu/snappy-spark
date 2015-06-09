@@ -333,14 +333,14 @@ abstract class StratifiedSampler(val qcs: Array[Int], val name: String,
 
   def sample(items: Iterator[Row], flush: Boolean): Iterator[Row]
 
-  def iterator: Iterator[Row] = {
+  def iterator(converter: Any => Any): Iterator[Row] = {
     val sampleBuffer = new mutable.ArrayBuffer[Row](StratifiedSampler.BUFSIZE)
     stratas.foldSegments(Iterator[Row]()) { (iter, seg) =>
       iter ++ {
         if (sampleBuffer.nonEmpty) sampleBuffer.clear()
         SegmentMap.lock(seg.readLock()) {
           seg.fold[Unit]()(foldReservoir(0, false, false, { (_, row) =>
-            sampleBuffer += row
+            sampleBuffer += converter(row).asInstanceOf[Row]
           }))
         }
         sampleBuffer.iterator
