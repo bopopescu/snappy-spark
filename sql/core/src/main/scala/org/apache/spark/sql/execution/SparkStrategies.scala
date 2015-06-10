@@ -307,8 +307,6 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         execution.Window(projectList, windowExpressions, spec, planLater(child)) :: Nil
       case logical.Sample(lb, ub, withReplacement, seed, child) =>
         execution.Sample(lb, ub, withReplacement, seed, planLater(child)) :: Nil
-      case logical.StratifiedSample(options, tableSchema, child) =>
-        execution.StratifiedSample(options, tableSchema, planLater(child)) :: Nil
       case logical.LocalRelation(output, data) =>
         LocalTableScan(output, data) :: Nil
       case logical.Limit(IntegerLiteral(limit), child) =>

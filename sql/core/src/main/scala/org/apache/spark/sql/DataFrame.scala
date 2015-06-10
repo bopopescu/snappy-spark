@@ -924,16 +924,6 @@ class DataFrame private[sql](
   }
 
   /**
-   * Creates stratified sampled data from given DataFrame
-   * {{{
-   *   peopleDf.stratifiedSample(Map("qcs" -> Array(1,2), "fraction" -> 0.01))
-   * }}}
-   */
-  def stratifiedSample(options: Map[String, Any]): DataFrame = {
-    StratifiedSample(options, schema, logicalPlan)
-  }
-
-  /**
    * Randomly splits this [[DataFrame]] with the provided weights.
    *
    * @param weights weights for splits, will be normalized if they don't sum to 1.

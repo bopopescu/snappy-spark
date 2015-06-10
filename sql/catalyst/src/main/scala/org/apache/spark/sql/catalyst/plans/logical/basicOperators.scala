@@ -339,12 +339,6 @@ case class Sample(
   override def output: Seq[Attribute] = child.output
 }
 
-case class StratifiedSample(options: Map[String, Any], tableSchema: StructType,
-                            child: LogicalPlan) extends UnaryNode {
-
-  override def output: Seq[Attribute] = child.output
-}
-
 case class Distinct(child: LogicalPlan) extends UnaryNode {
   override def output: Seq[Attribute] = child.output
 }
