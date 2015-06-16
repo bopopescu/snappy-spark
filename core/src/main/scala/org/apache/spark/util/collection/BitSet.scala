@@ -217,6 +217,12 @@ class BitSet(numBits: Int) extends Serializable {
     -1
   }
 
+  def copyTo(set: BitSet): BitSet = {
+    val other = if (numWords == set.numWords) set else new BitSet(capacity)
+    System.arraycopy(words, 0, other.words, 0, numWords)
+    other
+  }
+
   /** Return the number of longs it would take to hold numBits. */
   private def bit2words(numBits: Int) = ((numBits - 1) >> 6) + 1
 }
