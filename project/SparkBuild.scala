@@ -150,6 +150,7 @@ object SparkBuild extends PomBuild {
     publishLocal in MavenCompile <<= publishTask(publishLocalConfiguration in MavenCompile, deliverLocal),
     publishLocalBoth <<= Seq(publishLocal in MavenCompile, publishLocal).dependOn,
 
+    /*
     resolvers += snappySnapshotResolver,
     resolvers += snappyReleaseResolver,
     credentials += snappySnapshotCreds,
@@ -163,6 +164,7 @@ object SparkBuild extends PomBuild {
         Some(snappyReleaseResolver)
       }
     },
+    */
 
     javacOptions in (Compile, doc) ++= {
       val Array(major, minor, _) = System.getProperty("java.version").split("\\.", 3)
