@@ -71,7 +71,7 @@
     </dependency>
     <dependency>
       <groupId>io.snappydata</groupId>
-      <artifactId>spark-snappydata_${scala.binary.version}</artifactId>
+      <artifactId>snappy-spark-aqp_${scala.binary.version}</artifactId>
       <version>${project.version}</version>
     </dependency>
     <dependency>
