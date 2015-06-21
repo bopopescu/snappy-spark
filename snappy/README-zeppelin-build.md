@@ -31,7 +31,7 @@ seems to be compile error in flume, but it is not needed for zeppelin:
 
 3. Lastly build zeppelin with:
 
-    mvn -DskipTests -Dspark.version=1.4.0-SNAPSHOT.2 -Dhadoop.version=2.4.1 -Pspark-1.4 install
+    mvn -DskipTests -Dspark.version=1.4.0-SNAPSHOT.3 -Dhadoop.version=2.4.1 -Pspark-1.4 install
 
 
 Note: When building zeppelin, if you get errors that it can't find snappy
@@ -41,10 +41,10 @@ jars like:
         dependencies for project
         org.apache.zeppelin:zeppelin-spark:jar:0.5.0-incubating-SNAPSHOT:
         The following artifacts could not be resolved:
-          org.apache.spark:snappy-spark-launcher_2.10:jar:1.4.0-SNAPSHOT.2,
-          org.apache.spark:snappy-spark-unsafe_2.10:jar:1.4.0-SNAPSHOT.2:
+          org.apache.spark:snappy-spark-launcher_2.10:jar:1.4.0-SNAPSHOT.3,
+          org.apache.spark:snappy-spark-unsafe_2.10:jar:1.4.0-SNAPSHOT.3:
         Could not find artifact
-        org.apache.spark:snappy-spark-launcher_2.10:jar:1.4.0-SNAPSHOT.2 in central
+        org.apache.spark:snappy-spark-launcher_2.10:jar:1.4.0-SNAPSHOT.3 in central
         (https://repo.maven.apache.org/maven2) -> [Help 1]
 
 This was because the javadoc targets failed due to <p/> in *comments* etc.
