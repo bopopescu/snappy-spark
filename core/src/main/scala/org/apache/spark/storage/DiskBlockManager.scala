@@ -167,8 +167,8 @@ private[spark] class DiskBlockManager(blockManager: BlockManager, conf: SparkCon
   }
 
   private def addShutdownHook(): AnyRef = {
-    Utils.addShutdownHook { () =>
-      logDebug("Shutdown hook called")
+    Utils.addShutdownHook(Utils.TEMP_DIR_SHUTDOWN_PRIORITY + 1) { () =>
+      logInfo("Shutdown hook called")
       DiskBlockManager.this.doStop()
     }
   }
@@ -179,7 +179,7 @@ private[spark] class DiskBlockManager(blockManager: BlockManager, conf: SparkCon
     try {
       Utils.removeShutdownHook(shutdownHook)
     } catch {
-      case e: Exception => 
+      case e: Exception =>
         logError(s"Exception while removing shutdown hook.", e)
     }
     doStop()

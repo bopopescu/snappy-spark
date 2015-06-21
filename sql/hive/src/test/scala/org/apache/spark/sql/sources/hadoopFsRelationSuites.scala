@@ -17,8 +17,12 @@
 
 package org.apache.spark.sql.sources
 
+import java.io.File
+
+import com.google.common.io.Files
 import org.apache.hadoop.fs.Path
 
+import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.sql._
 import org.apache.spark.sql.hive.test.TestHive
@@ -73,6 +77,12 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils {
     checkAnswer(
       df.filter('a > 1 && 'p1 < 2).select('b, 'p1),
       for (i <- 2 to 3; _ <- Seq("foo", "bar")) yield Row(s"val_$i", 1))
+
+    // Project many copies of columns with different types (reproduction for SPARK-7858)
+    checkAnswer(
+      df.filter('a > 1 && 'p1 < 2).select('b, 'b, 'b, 'b, 'p1, 'p1, 'p1, 'p1),
+      for (i <- 2 to 3; _ <- Seq("foo", "bar"))
+        yield Row(s"val_$i", s"val_$i", s"val_$i", s"val_$i", 1, 1, 1, 1))
 
     // Self-join
     df.registerTempTable("t")
@@ -362,16 +372,6 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils {
         .partitionBy("p1")
         .saveAsTable("t")
     }
-
-    // Using different order of partition columns
-    intercept[Throwable] {
-      partitionedTestDF2.write
-        .format(dataSourceName)
-        .mode(SaveMode.Append)
-        .option("dataSchema", dataSchema.json)
-        .partitionBy("p2", "p1")
-        .saveAsTable("t")
-    }
   }
 
   test("saveAsTable()/load() - partitioned table - ErrorIfExists") {
@@ -456,6 +456,20 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils {
       }
     }
   }
+
+  test("SPARK-7616: adjust column name order accordingly when saving partitioned table") {
+    val df = (1 to 3).map(i => (i, s"val_$i", i * 2)).toDF("a", "b", "c")
+
+    df.write
+      .format(dataSourceName)
+      .mode(SaveMode.Overwrite)
+      .partitionBy("c", "a")
+      .saveAsTable("t")
+
+    withTable("t") {
+      checkAnswer(table("t"), df.select('b, 'c, 'a).collect())
+    }
+  }
 }
 
 class SimpleTextHadoopFsRelationSuite extends HadoopFsRelationTest {
@@ -483,6 +497,26 @@ class SimpleTextHadoopFsRelationSuite extends HadoopFsRelationTest {
         read.format(dataSourceName)
           .option("dataSchema", dataSchemaWithPartition.json)
           .load(file.getCanonicalPath))
+    }
+  }
+}
+
+class CommitFailureTestRelationSuite extends SparkFunSuite with SQLTestUtils {
+  import TestHive.implicits._
+
+  override val sqlContext = TestHive
+
+  val dataSourceName: String = classOf[CommitFailureTestSource].getCanonicalName
+
+  test("SPARK-7684: commitTask() failure should fallback to abortTask()") {
+    withTempPath { file =>
+      val df = (1 to 3).map(i => i -> s"val_$i").toDF("a", "b")
+      intercept[SparkException] {
+        df.write.format(dataSourceName).save(file.getCanonicalPath)
+      }
+
+      val fs = new Path(file.getCanonicalPath).getFileSystem(SparkHadoopUtil.get.conf)
+      assert(!fs.exists(new Path(file.getCanonicalPath, "_temporary")))
     }
   }
 }
@@ -517,17 +551,47 @@ class ParquetHadoopFsRelationSuite extends HadoopFsRelationTest {
     }
   }
 
-  test("SPARK-7616: adjust column name order accordingly when saving partitioned table") {
-    val df = (1 to 3).map(i => (i, s"val_$i", i * 2)).toDF("a", "b", "c")
+  test("SPARK-7868: _temporary directories should be ignored") {
+    withTempPath { dir =>
+      val df = Seq("a", "b", "c").zipWithIndex.toDF()
 
-    df.write
-      .format("parquet")
-      .mode(SaveMode.Overwrite)
-      .partitionBy("c", "a")
-      .saveAsTable("t")
+      df.write
+        .format("parquet")
+        .save(dir.getCanonicalPath)
 
-    withTable("t") {
-      checkAnswer(table("t"), df.select('b, 'c, 'a).collect())
+      df.write
+        .format("parquet")
+        .save(s"${dir.getCanonicalPath}/_temporary")
+
+      checkAnswer(read.format("parquet").load(dir.getCanonicalPath), df.collect())
+    }
+  }
+
+  test("SPARK-8014: Avoid scanning output directory when SaveMode isn't SaveMode.Append") {
+    withTempDir { dir =>
+      val path = dir.getCanonicalPath
+      val df = Seq(1 -> "a").toDF()
+
+      // Creates an arbitrary file.  If this directory gets scanned, ParquetRelation2 will throw
+      // since it's not a valid Parquet file.
+      val emptyFile = new File(path, "empty")
+      Files.createParentDirs(emptyFile)
+      Files.touch(emptyFile)
+
+      // This shouldn't throw anything.
+      df.write.format("parquet").mode(SaveMode.Ignore).save(path)
+
+      // This should only complain that the destination directory already exists, rather than file
+      // "empty" is not a Parquet file.
+      assert {
+        intercept[RuntimeException] {
+          df.write.format("parquet").mode(SaveMode.ErrorIfExists).save(path)
+        }.getMessage.contains("already exists")
+      }
+
+      // This shouldn't throw anything.
+      df.write.format("parquet").mode(SaveMode.Overwrite).save(path)
+      checkAnswer(read.format("parquet").load(path), df)
     }
   }
 }

@@ -23,7 +23,6 @@ import scala.collection.JavaConversions._
 import sbt._
 import sbt.Classpaths.publishTask
 import sbt.Keys._
-import sbtunidoc.Plugin.genjavadocSettings
 import sbtunidoc.Plugin.UnidocKeys.unidocGenjavadocVersion
 import com.typesafe.sbt.pom.{loadEffectivePom, PomBuild, SbtPomKeys}
 import net.virtualvoid.sbt.graph.Plugin.graphSettings
@@ -131,7 +130,12 @@ object SparkBuild extends PomBuild {
       sys.env.get("ARCHIVA_USER").orElse(Some("guest")).get,
       sys.env.get("ARCHIVA_PASS").orElse(Some("guest")).get)
 
-  lazy val sharedSettings = graphSettings ++ genjavadocSettings ++ Seq (
+  lazy val sparkGenjavadocSettings: Seq[sbt.Def.Setting[_]] = Seq(
+    libraryDependencies += compilerPlugin(
+      "org.spark-project" %% "genjavadoc-plugin" % unidocGenjavadocVersion.value cross CrossVersion.full),
+    scalacOptions <+= target.map(t => "-P:genjavadoc:out=" + (t / "java")))
+
+  lazy val sharedSettings = graphSettings ++ sparkGenjavadocSettings ++ Seq (
     javaHome := sys.env.get("JAVA_HOME")
       .orElse(sys.props.get("java.home").map { p => new File(p).getParentFile().getAbsolutePath() })
       .map(file),
@@ -139,7 +143,7 @@ object SparkBuild extends PomBuild {
     retrieveManaged := true,
     retrievePattern := "[type]s/[artifact](-[revision])(-[classifier]).[ext]",
     publishMavenStyle := true,
-    unidocGenjavadocVersion := "0.8",
+    unidocGenjavadocVersion := "0.9-spark0",
 
     resolvers += Resolver.mavenLocal,
     otherResolvers <<= SbtPomKeys.mvnLocalRepository(dotM2 => Seq(Resolver.file("dotM2", dotM2))),

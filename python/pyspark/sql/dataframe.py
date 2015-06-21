@@ -163,7 +163,7 @@ class DataFrame(object):
 
         Optionally overwriting any existing data.
         """
-        self._jdf.insertInto(tableName, overwrite)
+        self.write.insertInto(tableName, overwrite)
 
     @since(1.3)
     def saveAsTable(self, tableName, source=None, mode="error", **options):
@@ -1169,6 +1169,9 @@ class DataFrame(object):
         frequent element count algorithm described in
         "http://dx.doi.org/10.1145/762471.762473, proposed by Karp, Schenker, and Papadimitriou".
         :func:`DataFrame.freqItems` and :func:`DataFrameStatFunctions.freqItems` are aliases.
+
+        This function is meant for exploratory data analysis, as we make no guarantee about the
+        backward compatibility of the schema of the resulting DataFrame.
 
         :param cols: Names of the columns to calculate frequent items for as a list or tuple of
             strings.
