@@ -356,7 +356,9 @@ private[spark] class TaskSetManager(
 
       // Check for non-local tasks
       if (TaskLocality.isAllowed(locality, TaskLocality.ANY)) {
-        for (index <- speculatableTasks if canRunOnHost(index)) {
+        for (index <- speculatableTasks if canRunOnHost(index) &&
+            // don't return executor-local tasks that are still alive
+            canRunOnExecutor(execId, index)) {
           speculatableTasks -= index
           return Some((index, TaskLocality.ANY))
         }
@@ -364,6 +366,16 @@ private[spark] class TaskSetManager(
     }
 
     None
+  }
+
+  private def canRunOnExecutor(execId: String, taskId: Int): Boolean = {
+    val locations = tasks(taskId).preferredLocations
+    locations.isEmpty || !locations.exists {
+      case e: ExecutorCacheTaskLocation =>
+        sched.isExecutorAlive(e.executorId) &&
+            !executorIsBlacklisted(e.executorId, taskId)
+      case _ => false
+    }
   }
 
   /**
@@ -402,7 +414,9 @@ private[spark] class TaskSetManager(
     }
 
     if (TaskLocality.isAllowed(maxLocality, TaskLocality.ANY)) {
-      for (index <- dequeueTaskFromList(execId, allPendingTasks)) {
+      for (index <- dequeueTaskFromList(execId, allPendingTasks)
+        // don't return executor-local tasks that are still alive
+        if canRunOnExecutor(execId, index)) {
         return Some((index, TaskLocality.ANY, false))
       }
     }
