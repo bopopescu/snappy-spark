@@ -25,7 +25,7 @@ package org.apache.spark.util
  *
  * @constructor Initialize the StatCounter with the given values.
  */
-final class StatCounter(values: TraversableOnce[Double]) extends Serializable {
+class StatCounter(values: TraversableOnce[Double]) extends Serializable {
   private var n: Long = 0     // Running count of our values
   private var mu: Double = 0  // Running mean of our values
   private[spark] var m2: Double = 0  // Running variance numerator (sum of (x - mean)^2)
@@ -37,17 +37,17 @@ final class StatCounter(values: TraversableOnce[Double]) extends Serializable {
   /** Initialize the StatCounter with no values. */
   def this() = this(Nil)
 
-  private[spark] def init(count: Long, mean: Double, m: Double,
+  private[spark] def init(count: Long, mean: Double, nvariance: Double,
       max: Double, min: Double) = {
     n = count
     mu = mean
-    m2 = m
+    m2 = nvariance
     maxValue = max
     minValue = min
   }
 
   /** Add a value into this StatCounter, updating the internal statistics. */
-  def merge(value: Double): StatCounter = {
+  final def merge(value: Double): StatCounter = {
     val delta = value - mu
     n += 1
     mu += delta / n
@@ -58,7 +58,7 @@ final class StatCounter(values: TraversableOnce[Double]) extends Serializable {
   }
 
   /** Add multiple values into this StatCounter, updating the internal statistics. */
-  def merge(values: TraversableOnce[Double]): StatCounter = {
+  final def merge(values: TraversableOnce[Double]): StatCounter = {
     values.foreach(v => merge(v))
     this
   }
