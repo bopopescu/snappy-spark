@@ -276,7 +276,8 @@ class SqlParser extends AbstractSparkSQLParser with DataTypeParser {
       | "^" ^^^ { (e1: Expression, e2: Expression) => BitwiseXor(e1, e2) }
       )
 
-  protected lazy val function: Parser[Expression] =
+  protected lazy val function: Parser[Expression] = functionDef
+  protected def functionDef: Parser[Expression] =
     ( SUM   ~> "(" ~> expression             <~ ")" ^^ { case exp => Sum(exp) }
     | SUM   ~> "(" ~> DISTINCT ~> expression <~ ")" ^^ { case exp => SumDistinct(exp) }
     | COUNT ~  "(" ~> "*"                    <~ ")" ^^ { case _ => Count(Literal(1)) }

@@ -19,17 +19,21 @@ package org.apache.spark.sql.columnar
 
 import java.nio.ByteBuffer
 
+import org.apache.spark.{Accumulable, Accumulator, Accumulators}
+import org.apache.spark.sql.catalyst.expressions
+
+import scala.collection.mutable.ArrayBuffer
+import scala.collection.mutable.HashMap
+
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.Row
+import org.apache.spark.SparkContext
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Statistics}
 import org.apache.spark.sql.execution.{LeafNode, SparkPlan}
 import org.apache.spark.storage.StorageLevel
-import org.apache.spark.{Accumulable, Accumulator, Accumulators}
-
-import scala.collection.mutable.ArrayBuffer
 
 private[sql] object InMemoryRelation {
   def apply(

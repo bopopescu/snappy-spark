@@ -65,7 +65,15 @@ private[spark] object TaskLocation {
   def apply(str: String): TaskLocation = {
     val hstr = str.stripPrefix(inMemoryLocationTag)
     if (hstr.equals(str)) {
-      new HostTaskLocation(str)
+      val underscoreIndex = str.indexOf('_')
+      if (underscoreIndex >= 0) {
+        val host = str.substring(0, underscoreIndex)
+        val executorId = str.substring(underscoreIndex + 1)
+        apply(host, executorId)
+      }
+      else {
+        new HostTaskLocation(str)
+      }
     } else {
       new HostTaskLocation(hstr)
     }
