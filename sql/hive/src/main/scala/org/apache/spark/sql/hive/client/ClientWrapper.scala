@@ -256,6 +256,11 @@ private[hive] class ClientWrapper(
     client.alterTable(table.qualifiedName, qlTable)
   }
 
+  override def dropTable(dbName: String,
+      tableName: String): Unit = withHiveState {
+    client.dropTable(dbName, tableName)
+  }
+
   private def toHivePartition(partition: metadata.Partition): HivePartition = {
     val apiPartition = partition.getTPartition
     HivePartition(

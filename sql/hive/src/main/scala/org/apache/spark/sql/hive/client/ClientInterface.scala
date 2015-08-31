@@ -121,6 +121,9 @@ private[hive] trait ClientInterface {
   /** Updates the given table with new metadata. */
   def alterTable(table: HiveTable): Unit
 
+  /** Drops the given table from metadata. */
+  def dropTable(dbName: String, tableName: String): Unit
+
   /** Creates a new database with the given name. */
   def createDatabase(database: HiveDatabase): Unit
 
