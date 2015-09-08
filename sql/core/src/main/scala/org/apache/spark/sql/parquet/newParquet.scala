@@ -24,25 +24,25 @@ import scala.collection.JavaConversions._
 import scala.util.Try
 
 import com.google.common.base.Objects
-import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.io.Writable
 import org.apache.hadoop.mapreduce._
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat
-import parquet.filter2.predicate.FilterApi
-import parquet.hadoop._
-import parquet.hadoop.metadata.CompressionCodecName
-import parquet.hadoop.util.ContextUtil
+import org.apache.parquet.filter2.predicate.FilterApi
+import org.apache.parquet.hadoop._
+import org.apache.parquet.hadoop.metadata.CompressionCodecName
+import org.apache.parquet.hadoop.util.ContextUtil
 
-import org.apache.spark.{Partition => SparkPartition, SerializableWritable, Logging, SparkException}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.rdd.RDD._
 import org.apache.spark.rdd.RDD
+import org.apache.spark.rdd.RDD._
+import org.apache.spark.sql._
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.{DataType, StructType}
-import org.apache.spark.sql.{Row, SQLConf, SQLContext}
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{SerializableConfiguration, Utils}
+import org.apache.spark.{Logging, SparkException, Partition => SparkPartition}
 
 private[sql] class DefaultSource extends HadoopFsRelationProvider {
   override def createRelation(
@@ -59,7 +59,7 @@ private[sql] class DefaultSource extends HadoopFsRelationProvider {
 private[sql] class ParquetOutputWriter(path: String, context: TaskAttemptContext)
   extends OutputWriter {
 
-  private val recordWriter: RecordWriter[Void, Row] = {
+  private val recordWriter: RecordWriter[Void, InternalRow] = {
     val conf = context.getConfiguration
     val outputFormat = {
       // When appending new Parquet files to an existing Parquet file directory, to avoid
@@ -83,7 +83,7 @@ private[sql] class ParquetOutputWriter(path: String, context: TaskAttemptContext
             case partFilePattern(id) => id.toInt
             case name if name.startsWith("_") => 0
             case name if name.startsWith(".") => 0
-            case name => sys.error(
+            case name => throw new AnalysisException(
               s"Trying to write Parquet files to directory $outputPath, " +
                 s"but found items with illegal name '$name'.")
           }.reduceOption(_ max _).getOrElse(0)
@@ -92,7 +92,7 @@ private[sql] class ParquetOutputWriter(path: String, context: TaskAttemptContext
         }
       }
 
-      new ParquetOutputFormat[Row]() {
+      new ParquetOutputFormat[InternalRow]() {
         // Here we override `getDefaultWorkFile` for two reasons:
         //
         //  1. To allow appending.  We need to generate output file name based on the max available
@@ -111,7 +111,7 @@ private[sql] class ParquetOutputWriter(path: String, context: TaskAttemptContext
     outputFormat.getRecordWriter(context)
   }
 
-  override def write(row: Row): Unit = recordWriter.write(null, row)
+  override def write(row: Row): Unit = recordWriter.write(null, row.asInstanceOf[InternalRow])
 
   override def close(): Unit = recordWriter.close(context)
 }
@@ -211,8 +211,15 @@ private[sql] class ParquetRelation2(
         classOf[ParquetOutputCommitter],
         classOf[ParquetOutputCommitter])
 
+    if (conf.get("spark.sql.parquet.output.committer.class") == null) {
+      logInfo("Using default output committer for Parquet: " +
+        classOf[ParquetOutputCommitter].getCanonicalName)
+    } else {
+      logInfo("Using user defined output committer for Parquet: " + committerClass.getCanonicalName)
+    }
+
     conf.setClass(
-      SQLConf.OUTPUT_COMMITTER_CLASS,
+      SQLConf.OUTPUT_COMMITTER_CLASS.key,
       committerClass,
       classOf[ParquetOutputCommitter])
 
@@ -250,8 +257,8 @@ private[sql] class ParquetRelation2(
       requiredColumns: Array[String],
       filters: Array[Filter],
       inputFiles: Array[FileStatus],
-      broadcastedConf: Broadcast[SerializableWritable[Configuration]]): RDD[Row] = {
-    val useMetadataCache = sqlContext.getConf(SQLConf.PARQUET_CACHE_METADATA, "true").toBoolean
+      broadcastedConf: Broadcast[SerializableConfiguration]): RDD[Row] = {
+    val useMetadataCache = sqlContext.getConf(SQLConf.PARQUET_CACHE_METADATA)
     val parquetFilterPushDown = sqlContext.conf.parquetFilterPushDown
     // Create the function to set variable Parquet confs at both driver and executor side.
     val initLocalJobFuncOpt =
@@ -278,7 +285,7 @@ private[sql] class ParquetRelation2(
         initLocalJobFuncOpt = Some(initLocalJobFuncOpt),
         inputFormatClass = classOf[FilteringParquetRowInputFormat],
         keyClass = classOf[Void],
-        valueClass = classOf[Row]) {
+        valueClass = classOf[InternalRow]) {
 
         val cacheMetadata = useMetadataCache
 
@@ -323,7 +330,7 @@ private[sql] class ParquetRelation2(
             new SqlNewHadoopPartition(id, i, rawSplits(i).asInstanceOf[InputSplit with Writable])
           }
         }
-      }.values
+      }.values.map(_.asInstanceOf[Row])
     }
   }
 
@@ -380,11 +387,12 @@ private[sql] class ParquetRelation2(
       // time-consuming.
       if (dataSchema == null) {
         dataSchema = {
-          val dataSchema0 =
-            maybeDataSchema
-              .orElse(readSchema())
-              .orElse(maybeMetastoreSchema)
-              .getOrElse(sys.error("Failed to get the schema."))
+          val dataSchema0 = maybeDataSchema
+            .orElse(readSchema())
+            .orElse(maybeMetastoreSchema)
+            .getOrElse(throw new AnalysisException(
+              s"Failed to discover schema of Parquet file(s) in the following location(s):\n" +
+                paths.mkString("\n\t")))
 
           // If this Parquet relation is converted from a Hive Metastore table, must reconcile case
           // case insensitivity issue and possible schema mismatch (probably caused by schema
@@ -489,7 +497,7 @@ private[sql] object ParquetRelation2 extends Logging {
       ParquetTypesConverter.convertToString(dataSchema.toAttributes))
 
     // Tell FilteringParquetRowInputFormat whether it's okay to cache Parquet and FS metadata
-    conf.set(SQLConf.PARQUET_CACHE_METADATA, useMetadataCache.toString)
+    conf.setBoolean(SQLConf.PARQUET_CACHE_METADATA.key, useMetadataCache)
   }
 
   /** This closure sets input paths at the driver side. */

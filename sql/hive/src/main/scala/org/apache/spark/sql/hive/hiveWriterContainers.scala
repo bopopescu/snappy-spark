@@ -35,9 +35,9 @@ import org.apache.spark.mapred.SparkHadoopMapRedUtil
 import org.apache.spark.sql.Row
 import org.apache.spark.{Logging, SerializableWritable, SparkHadoopWriter}
 import org.apache.spark.sql.catalyst.util.DateUtils
-import org.apache.spark.sql.hive.{ShimFileSinkDesc => FileSinkDesc}
-import org.apache.spark.sql.hive.HiveShim._
+import org.apache.spark.sql.hive.HiveShim.{ShimFileSinkDesc => FileSinkDesc}
 import org.apache.spark.sql.types._
+import org.apache.spark.util.SerializableJobConf
 
 /**
  * Internal helper class that saves an RDD using a Hive OutputFormat.
@@ -58,7 +58,7 @@ private[hive] class SparkHiveWriterContainer(
     PlanUtils.configureOutputJobPropertiesForStorageHandler(tableDesc)
     Utilities.copyTableJobPropertiesToConf(tableDesc, jobConf)
   }
-  protected val conf = new SerializableWritable(jobConf)
+  protected val conf = new SerializableJobConf(jobConf)
 
   private var jobID = 0
   private var splitID = 0
@@ -228,12 +228,11 @@ private[spark] class SparkHiveDynamicPartitionWriterContainer(
       newFileSinkDesc.setCompressCodec(fileSinkConf.getCompressCodec)
       newFileSinkDesc.setCompressType(fileSinkConf.getCompressType)
 
-      val path = {
-        val outputPath = FileOutputFormat.getOutputPath(conf.value)
-        assert(outputPath != null, "Undefined job output-path")
-        val workPath = new Path(outputPath, dynamicPartPath.stripPrefix("/"))
-        new Path(workPath, getOutputName)
-      }
+      // use the path like ${hive_tmp}/_temporary/${attemptId}/
+      // to avoid write to the same file when `spark.speculation=true`
+      val path = FileOutputFormat.getTaskOutputPath(
+        conf.value,
+        dynamicPartPath.stripPrefix("/") + "/" + getOutputName)
 
       HiveFileFormatUtils.getHiveRecordWriter(
         conf.value,
