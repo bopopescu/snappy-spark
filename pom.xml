@@ -2284,7 +2284,7 @@
 
     <!-- Ganglia integration is not included by default due to LGPL-licensed code -->
     <profile>
-      <id>spark-ganglia-lgpl</id>
+      <id>snappy-spark-ganglia-lgpl</id>
       <modules>
         <module>extras/spark-ganglia-lgpl</module>
       </modules>

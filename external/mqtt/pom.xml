@@ -93,7 +93,7 @@
             </goals>
             <configuration>
               <!-- Make sure the file path is same as the sbt build -->
-              <finalName>spark-streaming-mqtt-test-${project.version}</finalName>
+              <finalName>snappy-spark-streaming-mqtt-test-${project.version}</finalName>
               <outputDirectory>${project.build.directory}/scala-${scala.binary.version}/</outputDirectory>
               <appendAssemblyId>false</appendAssemblyId>
               <!-- Don't publish it since it's only for Python tests -->

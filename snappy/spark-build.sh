@@ -27,9 +27,9 @@ if [ -n "$1" ]; then
 fi
 
 if [ "${SCALA}" = "scala-2.10" ]; then
-  ./dev/change-version-to-2.10.sh
+  ./dev/change-scala-version.sh 2.10
 elif [ "${SCALA}" = "scala-2.11" ]; then
-  ./dev/change-version-to-2.11.sh
+  ./dev/change-scala-version.sh 2.11
 fi
 
 if [ -z "${ARGS}" ]; then
