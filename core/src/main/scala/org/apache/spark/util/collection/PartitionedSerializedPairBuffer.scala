@@ -21,8 +21,6 @@ import java.io.InputStream
 import java.nio.IntBuffer
 import java.util.Comparator
 
-import org.apache.spark.SparkEnv
-
 import org.apache.spark.serializer.{JavaSerializerInstance, SerializerInstance}
 import org.apache.spark.storage.DiskBlockObjectWriter
 import org.apache.spark.util.collection.PartitionedSerializedPairBuffer._
