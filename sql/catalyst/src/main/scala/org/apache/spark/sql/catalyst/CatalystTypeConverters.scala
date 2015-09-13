@@ -411,6 +411,16 @@ object CatalystTypeConverters {
   }
 
   /**
+   * Creates a converter function that will convert Catalyst types to
+   * Scala type reading from a Row. Typical use case would be converting
+   * a collection of rows that have the same schema. You will call this
+   * function once to get a converter, and apply it to every row.
+   */
+  private[sql] def createRowToScalaConverter(
+      dataType: DataType): (InternalRow, Int) => Any =
+    getConverterForType(dataType).toScala
+
+  /**
    *  Converts Scala objects to Catalyst rows / types.
    *
    *  Note: This should be called before do evaluation on Row
