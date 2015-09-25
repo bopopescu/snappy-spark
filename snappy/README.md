@@ -58,51 +58,7 @@ no need for an sbt installation since the build/sbt script in spark pulls
 everything as required.
 
 
-## Eclipse with snappy-spark
-
-The easiest way is to get the scala IDE from http://scala-ide.org which is
-eclipse with scala plugin preconfigured. Latest version 4.0.0 at the time of
-writing works quite well overall.
-
-First generate the eclipse files using sbt's eclipse target e.g.
-
-build/sbt -Pyarn -Phadoop-2.4 -Dhadoop.version=2.4.1 -Phive -Phive-thriftserver -Pyarn -Dscala-2.11 -DskipTests eclipse
-
-OR
-
-snappy/spark-build.sh -scala-2.11 eclipse
-
-
-To add references to source and javadoc jars, use:
-
-build/sbt -Pyarn -Phadoop-2.4 -Dhadoop.version=2.4.1 -Phive -Phive-thriftserver -Pyarn -Dscala-2.11 -DskipTests "eclipse with-source=true"
-
-OR
-
-snappy/spark-build.sh -scala-2.11 "eclipse with-source=true"
-
-Scala 2.11 works best with scala IDE, so use that for eclipse.
-Next import the eclipse projects preferably in a fresh workspace
-"File->Import->General->Existing Projects into Workspace". For a start,
-import the following (preferably in that order):
-
-    spark-launcher           from launcher directory in the checkout
-    spark-network-common     from network/common
-    spark-network-shuffle    from network/shuffle
-    spark-core               from core
-    spark-catalyst           from sql/catalyst
-    spark-sql                from sql/core
-    spark-hive               from sql/hive
-    spark-streaming          from streaming
-    spark-hive-thriftserver  from sql/hive-thriftserver
-
-These should be enough for current changes to spark we plan on doing.
-
-Alternatively untar the eclipse-files.tgz inside the checkout which will
-overwrite the .classpath with these for the above mentioned 9 projects.
-
-
-## Running Spark SQL
+## Running Spark shell
 
 For interactive usage, try bin/spark-shell. The spark-shell-launch.sh script
 in the scripts directory of this repository will start a local node with
