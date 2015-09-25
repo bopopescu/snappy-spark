@@ -98,7 +98,6 @@
     <module>sql/core</module>
     <module>sql/hive</module>
     <module>unsafe</module>
-    <module>sql/snappy</module>
     <module>assembly</module>
     <module>external/twitter</module>
     <module>external/flume</module>

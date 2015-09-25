@@ -166,7 +166,7 @@ abstract class AbstractCommandBuilder {
     if (prependClasses || isTesting) {
       String scala = getScalaVersion();
       List<String> projects = Arrays.asList("core", "repl", "mllib", "bagel", "graphx",
-        "streaming", "tools", "sql/catalyst", "sql/core", "sql/snappy", "sql/hive", "sql/hive-thriftserver",
+        "streaming", "tools", "sql/catalyst", "sql/core", "sql/hive", "sql/hive-thriftserver",
         "yarn", "launcher");
       if (prependClasses) {
         if (!isTesting) {

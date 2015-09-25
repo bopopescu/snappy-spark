@@ -10,7 +10,6 @@ examples from snappy-spark/pom.xml <modules>...</modules> entity.  There
 seems to be compile error in flume, but it is not needed for zeppelin:
 
     ...
-    <module>sql/snappy</module>
     <module>assembly</module>
     <module>external/twitter</module>
     <!--
