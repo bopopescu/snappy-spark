@@ -43,7 +43,7 @@ The snappy-spark repository now has the required additions checked in.
 
 Use this to get a full build with Hive/Thrift support:
 
-build/sbt -Pyarn -Phadoop-2.4 -Dhadoop.version=2.4.1 -Phive -Phive-thriftserver -Dscala-2.11 -DskipTests assembly
+build/sbt -Pyarn -Phadoop-2.4 -Dhadoop.version=2.4.1 -Phive -Phive-thriftserver -Pyarn -Dscala-2.11 -DskipTests assembly
 
 Use the spark-build.sh script in snappy directory of this repo which has
 these arguments by default. Any arguments to the script will be passed
@@ -66,7 +66,7 @@ writing works quite well overall.
 
 First generate the eclipse files using sbt's eclipse target e.g.
 
-build/sbt -Pyarn -Phadoop-2.4 -Dhadoop.version=2.4.1 -Phive -Phive-thriftserver -Dscala-2.11 -DskipTests eclipse
+build/sbt -Pyarn -Phadoop-2.4 -Dhadoop.version=2.4.1 -Phive -Phive-thriftserver -Pyarn -Dscala-2.11 -DskipTests eclipse
 
 OR
 
@@ -75,7 +75,7 @@ snappy/spark-build.sh -scala-2.11 eclipse
 
 To add references to source and javadoc jars, use:
 
-build/sbt -Pyarn -Phadoop-2.4 -Dhadoop.version=2.4.1 -Phive -Phive-thriftserver -Dscala-2.11 -DskipTests "eclipse with-source=true"
+build/sbt -Pyarn -Phadoop-2.4 -Dhadoop.version=2.4.1 -Phive -Phive-thriftserver -Pyarn -Dscala-2.11 -DskipTests "eclipse with-source=true"
 
 OR
 
