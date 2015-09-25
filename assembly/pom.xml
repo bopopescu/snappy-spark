@@ -70,11 +70,6 @@
       <version>${project.version}</version>
     </dependency>
     <dependency>
-      <groupId>io.snappydata</groupId>
-      <artifactId>snappy-spark-aqp_${scala.binary.version}</artifactId>
-      <version>${project.version}</version>
-    </dependency>
-    <dependency>
       <groupId>org.apache.spark</groupId>
       <artifactId>snappy-spark-repl_${scala.binary.version}</artifactId>
       <version>${project.version}</version>
