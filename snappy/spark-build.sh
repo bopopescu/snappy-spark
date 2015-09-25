@@ -33,7 +33,7 @@ elif [ "${SCALA}" = "scala-2.11" ]; then
 fi
 
 if [ -z "${ARGS}" ]; then
-  ${BUILDER} -Phadoop-2.4 -Dhadoop.version=2.4.1 -Phive -Phive-thriftserver -DskipTests -D${SCALA}
+  ${BUILDER} -Phadoop-2.4 -Dhadoop.version=2.4.1 -Phive -Phive-thriftserver -Pyarn -DskipTests -D${SCALA}
 else
-  eval ${BUILDER} -Phadoop-2.4 -Dhadoop.version=2.4.1 -Phive -Phive-thriftserver -DskipTests -D${SCALA} ${ARGS}
+  eval ${BUILDER} -Phadoop-2.4 -Dhadoop.version=2.4.1 -Phive -Phive-thriftserver -Pyarn -DskipTests -D${SCALA} ${ARGS}
 fi
