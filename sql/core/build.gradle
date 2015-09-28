@@ -1,0 +1,26 @@
+description = 'Spark Project SQL'
+
+dependencies {
+  compile project(subprojectBase + 'snappy-spark-core_' + scalaBinaryVersion)
+  compile project(subprojectBase + 'snappy-spark-catalyst_' + scalaBinaryVersion)
+
+  compile group: 'org.apache.parquet', name: 'parquet-common', version:'1.7.0'
+  compile group: 'org.apache.parquet', name: 'parquet-column', version:'1.7.0'
+  compile group: 'org.apache.parquet', name: 'parquet-encoding', version:'1.7.0'
+  compile group: 'org.apache.parquet', name: 'parquet-hadoop', version:'1.7.0'
+  compile group: 'org.apache.parquet', name: 'parquet-format', version:'2.3.0-incubating'
+  compile group: 'com.fasterxml.jackson.core', name: 'jackson-databind', version:'2.4.4'
+
+  testCompile project(path: subprojectBase + 'snappy-spark-core_' + scalaBinaryVersion, configuration: 'testOutput')
+  testCompile project(path: subprojectBase + 'snappy-spark-catalyst_' + scalaBinaryVersion, configuration: 'testOutput')
+  testCompile group: 'com.h2database', name: 'h2', version:'1.4.183'
+  testCompile group: 'mysql', name: 'mysql-connector-java', version:'5.1.34'
+  testCompile group: 'org.postgresql', name: 'postgresql', version:'9.3-1102-jdbc41'
+  testCompile group: 'org.apache.parquet', name: 'parquet-avro', version:'1.7.0'
+}
+
+compileTestJava.source sourceSets.test.java, 'src/test/gen-java'
+
+// fix scala+java test ordering
+sourceSets.test.scala.srcDir "src/main/java"
+sourceSets.test.java.srcDirs = []

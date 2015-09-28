@@ -1,0 +1,7 @@
+description = 'Spark Project Unsafe'
+
+dependencies {
+  provided(group: 'org.slf4j', name: 'slf4j-api', version: slf4jVersion)
+
+  testCompile group: 'org.apache.commons', name: 'commons-lang3', version:'3.3.2'
+}

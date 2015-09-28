@@ -1,0 +1,7 @@
+description = 'Spark Project Bagel'
+
+dependencies {
+  compile project(subprojectBase + 'snappy-spark-core_' + scalaBinaryVersion)
+
+  testCompile project(path: subprojectBase + 'snappy-spark-core_' + scalaBinaryVersion, configuration: 'testOutput')
+}

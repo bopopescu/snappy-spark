@@ -1,0 +1,13 @@
+description = 'Spark Project External MQTT'
+
+dependencies {
+  provided project(subprojectBase + 'snappy-spark-streaming_' + scalaBinaryVersion)
+  compile group: 'org.eclipse.paho', name: 'org.eclipse.paho.client.mqttv3', version:'1.0.1'
+
+  testCompile project(path: subprojectBase + 'snappy-spark-core_' + scalaBinaryVersion, configuration: 'testOutput')
+  testCompile group: 'org.apache.activemq', name: 'activemq-core', version:'5.7.0'
+}
+
+// TODO: descriptor etc in maven build?
+
+artifacts.archives packageTests

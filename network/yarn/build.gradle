@@ -1,0 +1,15 @@
+description = 'Spark Project YARN Shuffle Service'
+
+dependencies {
+  compile project(subprojectBase + 'snappy-spark-network-shuffle_' + scalaBinaryVersion)
+
+  compile(group: 'org.apache.hadoop', name: 'hadoop-yarn-api', version: hadoopVersion) {
+    exclude(module: 'servlet-api')
+    exclude(group: 'asm', module: 'asm')
+    exclude(group: 'org.ow2.asm', module: 'asm')
+    exclude(module: 'netty')
+    exclude(module: 'commons-logging')
+  }
+}
+
+// TODO: shade task in maven

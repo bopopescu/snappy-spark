@@ -1,0 +1,65 @@
+description = 'Spark Project Hive Thrift Server'
+
+dependencies {
+  compile project(subprojectBase + 'snappy-spark-hive_' + scalaBinaryVersion)
+
+  compile group: 'jline', name: 'jline', version: '2.12'
+  compile(group: 'org.spark-project.hive', name: 'hive-cli', version: '1.2.1.spark') {
+    exclude(module: 'hive-common')
+    exclude(module: 'hive-exec')
+    exclude(module: 'hive-jdbc')
+    exclude(module: 'hive-metastore')
+    exclude(module: 'hive-serde')
+    exclude(module: 'hive-service')
+    exclude(module: 'hive-shims')
+    exclude(module: 'libthrift')
+    exclude(module: 'slf4j-api')
+    exclude(module: 'slf4j-log4j12')
+    exclude(module: 'log4j')
+    exclude(module: 'commons-logging')
+  }
+  compile(group: 'org.spark-project.hive', name: 'hive-jdbc', version: '1.2.1.spark') {
+    exclude(module: 'hive-common')
+    exclude(module: 'hive-metastore')
+    exclude(module: 'hive-serde')
+    exclude(module: 'hive-service')
+    exclude(module: 'hive-shims')
+    exclude(module: 'httpclient')
+    exclude(module: 'httpcore')
+    exclude(module: 'curator-framework')
+    exclude(module: 'libthrift')
+    exclude(module: 'libfb303')
+    exclude(module: 'zookeeper')
+    exclude(module: 'slf4j-api')
+    exclude(module: 'slf4j-log4j12')
+    exclude(module: 'log4j')
+    exclude(module: 'commons-logging')
+  }
+  compile(group: 'org.spark-project.hive', name: 'hive-service', version: '1.2.1.spark') {
+    exclude(module: 'hive-common')
+    exclude(module: 'hive-exec')
+    exclude(module: 'hive-metastore')
+    exclude(module: 'hive-shims')
+    exclude(module: 'commons-codec')
+    exclude(module: 'curator-framework')
+    exclude(module: 'curator-recipes')
+    exclude(module: 'libfb303')
+    exclude(module: 'libthrift')
+  }
+  compile(group: 'org.spark-project.hive', name: 'hive-beeline', version: '1.2.1.spark') {
+    exclude(module: 'hive-common')
+    exclude(module: 'hive-exec')
+    exclude(module: 'hive-jdbc')
+    exclude(module: 'hive-metastore')
+    exclude(module: 'hive-service')
+    exclude(module: 'hive-shims')
+    exclude(module: 'libthrift')
+    exclude(module: 'slf4j-api')
+    exclude(module: 'slf4j-log4j12')
+    exclude(module: 'log4j')
+    exclude(module: 'commons-logging')
+  }
+
+  testCompile project(path: subprojectBase + 'snappy-spark-core_' + scalaBinaryVersion, configuration: 'testOutput')
+  testCompile project(path: subprojectBase + 'snappy-spark-sql_' + scalaBinaryVersion, configuration: 'testOutput')
+}

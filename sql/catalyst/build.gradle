@@ -1,0 +1,13 @@
+description = 'Spark Project Catalyst'
+
+dependencies {
+  compile project(subprojectBase + 'snappy-spark-core_' + scalaBinaryVersion)
+  compile project(subprojectBase + 'snappy-spark-unsafe_' + scalaBinaryVersion)
+
+  compile group: 'org.codehaus.janino', name: 'commons-compiler', version:'2.7.8'
+  compile group: 'org.codehaus.janino', name: 'janino', version:'2.7.8'
+
+  testCompile project(path: subprojectBase + 'snappy-spark-core_' + scalaBinaryVersion, configuration: 'testOutput')
+}
+
+artifacts.archives packageTests

@@ -1,0 +1,17 @@
+description = 'Spark Project Streaming'
+
+// fix scala+java mix to use scala first for tests
+sourceSets.test.scala.srcDir "src/main/java"
+sourceSets.test.java.srcDirs = []
+
+dependencies {
+  compile project(subprojectBase + 'snappy-spark-core_' + scalaBinaryVersion)
+
+  compile group: 'com.101tec', name: 'zkclient', version: '0.3'
+
+  testCompile project(path: subprojectBase + 'snappy-spark-core_' + scalaBinaryVersion, configuration: 'testOutput')
+}
+
+// TODO: shadeTestJar in maven?
+
+artifacts.archives packageTests

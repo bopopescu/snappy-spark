@@ -1,0 +1,17 @@
+description = 'Spark Project External Kafka'
+
+dependencies {
+  provided project(subprojectBase + 'snappy-spark-streaming_' + scalaBinaryVersion)
+
+  compile(group: 'org.apache.kafka', name: 'kafka_' + scalaBinaryVersion, version: '0.8.2.1') {
+    exclude(module: 'jmxri')
+    exclude(module: 'jmxtools')
+    exclude(module: 'jopt-simple')
+    exclude(module: 'slf4j-simple')
+    exclude(module: 'zookeeper')
+  }
+  compile group: 'com.yammer.metrics', name: 'metrics-core', version: '2.2.0'
+
+  testCompile project(path: subprojectBase + 'snappy-spark-core_' + scalaBinaryVersion, configuration: 'testOutput')
+  testCompile group: 'net.sf.jopt-simple', name: 'jopt-simple', version: '3.2'
+}

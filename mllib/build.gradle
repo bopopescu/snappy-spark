@@ -1,0 +1,36 @@
+description = 'Spark Project ML Library'
+
+dependencies {
+  compile project(subprojectBase + 'snappy-spark-core_' + scalaBinaryVersion)
+  compile project(subprojectBase + 'snappy-spark-streaming_' + scalaBinaryVersion)
+  compile project(subprojectBase + 'snappy-spark-sql_' + scalaBinaryVersion)
+  compile project(subprojectBase + 'snappy-spark-graphx_' + scalaBinaryVersion)
+
+  compile group: 'com.github.rwl', name: 'jtransforms', version: '2.4.0'
+  compile(group: 'org.scalanlp', name: 'breeze_' + scalaBinaryVersion, version: '0.11.2') {
+    exclude(module: 'junit')
+    exclude(module: 'commons-math3')
+  }
+  compile(group: 'org.scalanlp', name: 'breeze-macros_' + scalaBinaryVersion, version: '0.11.2') {
+    exclude(module: 'junit')
+    exclude(module: 'commons-math3')
+  }
+  compile(group: 'org.jpmml', name: 'pmml-schema', version: '1.1.15') {
+    exclude(module: 'FastInfoset')
+    exclude(module: 'istack-commons-runtime')
+  }
+  compile(group: 'org.jpmml', name: 'pmml-model', version: '1.1.15') {
+    exclude(module: 'FastInfoset')
+    exclude(module: 'istack-commons-runtime')
+  }
+
+  testCompile project(path: subprojectBase + 'snappy-spark-core_' + scalaBinaryVersion, configuration: 'testOutput')
+  testCompile project(path: subprojectBase + 'snappy-spark-streaming_' + scalaBinaryVersion, configuration: 'testOutput')
+  testCompile group: 'org.jblas', name: 'jblas', version: '1.2.4'
+}
+
+// TODO: netlib-lgpl profile
+
+// fix scala+java test ordering
+sourceSets.test.scala.srcDir "src/main/java"
+sourceSets.test.java.srcDirs = []

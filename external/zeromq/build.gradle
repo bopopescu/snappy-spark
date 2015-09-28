@@ -1,0 +1,11 @@
+description = 'Spark Project External ZeroMQ'
+
+dependencies {
+  compile(group: 'com.typesafe.akka', name: 'akka-zeromq_' + scalaBinaryVersion, version: akkaVersion) {
+    exclude(module: 'akka-actor_' + scalaBinaryVersion)
+  }
+
+  provided project(subprojectBase + 'snappy-spark-streaming_' + scalaBinaryVersion)
+
+  testCompile project(path: subprojectBase + 'snappy-spark-core_' + scalaBinaryVersion, configuration: 'testOutput')
+}

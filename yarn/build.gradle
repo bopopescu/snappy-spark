@@ -1,0 +1,55 @@
+description = 'Spark Project YARN'
+
+dependencies {
+  compile project(subprojectBase + 'snappy-spark-core_' + scalaBinaryVersion)
+
+  compile(group: 'org.apache.hadoop', name: 'hadoop-yarn-api', version:hadoopVersion) {
+    exclude(module: 'servlet-api')
+    exclude(group: 'asm', module: 'asm')
+    exclude(group: 'org.ow2.asm', module: 'asm')
+    exclude(module: 'netty')
+    exclude(module: 'commons-logging')
+  }
+  compile(group: 'org.apache.hadoop', name: 'hadoop-yarn-common', version:hadoopVersion) {
+    exclude(group: 'asm', module: 'asm')
+    exclude(group: 'org.ow2.asm', module: 'asm')
+    exclude(module: 'netty')
+    exclude(module: 'servlet-api')
+    exclude(module: 'commons-logging')
+  }
+  compile(group: 'org.apache.hadoop', name: 'hadoop-yarn-server-web-proxy', version:hadoopVersion) {
+    exclude(group: 'asm', module: 'asm')
+    exclude(group: 'org.ow2.asm', module: 'asm')
+    exclude(module: 'netty')
+    exclude(module: 'servlet-api')
+    exclude(module: 'commons-logging')
+  }
+  compile(group: 'org.apache.hadoop', name: 'hadoop-yarn-client', version:hadoopVersion) {
+    exclude(group: 'asm', module: 'asm')
+    exclude(group: 'org.ow2.asm', module: 'asm')
+    exclude(module: 'netty')
+    exclude(module: 'servlet-api')
+    exclude(module: 'commons-logging')
+  }
+  compile(group: 'org.mortbay.jetty', name: 'jetty', version:'6.1.26') {
+    exclude(module: 'servlet-api')
+  }
+
+  testCompile project(subprojectBase + 'snappy-spark-network-yarn_' + scalaBinaryVersion)
+  testCompile project(path: subprojectBase + 'snappy-spark-core_' + scalaBinaryVersion, configuration: 'testOutput')
+
+  testCompile group: 'org.eclipse.jetty.orbit', name: 'javax.servlet.jsp', version:'2.2.0.v201112011158'
+  testCompile group: 'org.eclipse.jetty.orbit', name: 'javax.servlet.jsp.jstl', version:'1.2.0.v201105211821'
+  testCompile(group: 'org.apache.hadoop', name: 'hadoop-yarn-server-tests', version:hadoopVersion, classifier:'tests') {
+    exclude(group: 'asm', module: 'asm')
+    exclude(group: 'org.ow2.asm', module: 'asm')
+    exclude(module: 'netty')
+    exclude(module: 'servlet-api')
+    exclude(module: 'commons-logging')
+  }
+  testCompile group: 'com.sun.jersey', name: 'jersey-core', version:'1.9'
+  testCompile group: 'com.sun.jersey', name: 'jersey-server', version:'1.9'
+  testCompile(group: 'com.sun.jersey', name: 'jersey-json', version:'1.9') {
+    exclude(module: 'stax-api')
+  }
+}
