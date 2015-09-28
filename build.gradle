@@ -36,6 +36,15 @@ allprojects {
   apply plugin: 'maven'
   apply plugin: 'idea'
   apply plugin: 'eclipse'
+  //apply plugin: "com.github.maiflai.scalatest"
+
+  // apply compiler options
+  sourceCompatibility = 1.7
+  targetCompatibility = 1.7
+
+  compileJava.options.encoding = 'UTF-8'
+  compileScala.options.encoding = 'UTF-8'
+  compileJava.options.compilerArgs << '-Xlint:all,-serial,-path'
 
   group = "org.apache.spark"
   version = "1.5.0-SNAPSHOT.1"
@@ -67,14 +76,7 @@ allprojects {
 }
 
 subprojects {
-  // apply compiler options
-  sourceCompatibility = 1.7
-  targetCompatibility = 1.7
-
-  compileJava.options.encoding = 'UTF-8'
-  compileScala.options.encoding = 'UTF-8'
-  compileJava.options.compilerArgs << '-Xlint:all,-serial,-path'
-
+  // when invoking from snappy-commons, below are already defined at top-level
   if (rootProject.name == "snappy-spark") {
     task packageSources(type: Jar, dependsOn: classes) {
       classifier = 'sources'
@@ -268,7 +270,6 @@ subprojects {
       exclude(group: 'org.mortbay.jetty', module: 'servlet-api')
       exclude(group: 'org.apache.velocity', module: 'velocity')
     }
-
 
     testCompile 'junit:junit:4.10'
     testCompile 'org.scalatest:scalatest_' + scalaBinaryVersion + ':2.2.1'
