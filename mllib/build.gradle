@@ -32,5 +32,5 @@ dependencies {
 // TODO: netlib-lgpl profile
 
 // fix scala+java test ordering
-sourceSets.test.scala.srcDir "src/main/java"
+sourceSets.test.scala.srcDir "src/test/java"
 sourceSets.test.java.srcDirs = []

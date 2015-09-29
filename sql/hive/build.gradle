@@ -79,7 +79,7 @@ dependencies {
   testCompile group: 'commons-lang', name: 'commons-lang', version: '2.6'
 }
 
-compileTestJava.source sourceSets.test.java, 'compatibility/src/test/scala'
+sourceSets.test.scala.srcDirs = ["src/test/scala", "compatibility/src/test/scala"]
 
 // TODO: additional options to scalatest
 // TODO: deploy datanucleus jars task in maven?

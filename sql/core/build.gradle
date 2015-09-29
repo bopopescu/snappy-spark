@@ -19,8 +19,6 @@ dependencies {
   testCompile group: 'org.apache.parquet', name: 'parquet-avro', version:'1.7.0'
 }
 
-compileTestJava.source sourceSets.test.java, 'src/test/gen-java'
-
 // fix scala+java test ordering
-sourceSets.test.scala.srcDir "src/main/java"
+sourceSets.test.scala.srcDir "src/test/java"
 sourceSets.test.java.srcDirs = ["src/test/gen-java"]
