@@ -10,7 +10,8 @@ dependencies {
     exclude(module: 'libthrift')
   }
 
-  testCompile group: 'io.netty', name: 'netty', version:'3.4.0.Final'
+  testCompile group: 'com.google.guava', name: 'guava', version: '14.0.1'
+  testCompile group: 'io.netty', name: 'netty', version: '3.5.12.Final'
 }
 
 apply plugin: "com.commercehub.gradle.plugin.avro"

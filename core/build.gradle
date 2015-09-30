@@ -7,7 +7,7 @@ dependencies {
   compile project(subprojectBase + 'snappy-spark-unsafe_' + scalaBinaryVersion)
 
   compile(group: 'org.apache.avro', name: 'avro-mapred', version: '1.7.7', classifier:'hadoop2') {
-    exclude(group: 'org.jboss.netty', module: 'netty')
+    exclude(group: 'io.netty', module: 'netty')
     exclude(group: 'org.mortbay.jetty', module: 'jetty')
     exclude(group: 'org.mortbay.jetty', module: 'jetty-util')
     exclude(group: 'org.mortbay.jetty', module: 'servlet-api')
@@ -36,7 +36,7 @@ dependencies {
     exclude(group: 'commons-logging', module: 'commons-logging')
   }
   compile(group: 'org.apache.curator', name: 'curator-recipes', version: '2.4.0') {
-    exclude(module: 'netty')
+    exclude(group: 'org.jboss.netty', module: 'netty')
   }
   compile group: 'org.eclipse.jetty', name: 'jetty-plus', version: jettyVersion
   compile group: 'org.eclipse.jetty', name: 'jetty-security', version: jettyVersion
@@ -96,6 +96,7 @@ dependencies {
   testCompile group: 'org.apache.derby', name: 'derby', version: '10.10.1.1'
   testCompile(group: 'org.seleniumhq.selenium', name: 'selenium-java', version: '2.42.2') {
     exclude(group: 'com.google.guava', module: 'guava')
+    exclude(group: 'io.netty', module: 'netty')
   }
   testCompile group: 'xml-apis', name: 'xml-apis', version: '1.4.01'
   testCompile group: 'org.hamcrest', name: 'hamcrest-core', version: '1.3'

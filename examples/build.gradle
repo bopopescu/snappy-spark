@@ -26,7 +26,7 @@ dependencies {
   }
   compile(group: 'org.apache.hbase', name: 'hbase-client', version: hbaseVersion) {
     exclude(module: 'hbase-annotations')
-    exclude(module: 'netty')
+    exclude(group: 'io.netty', module: 'netty')
   }
   compile(group: 'org.apache.hbase', name: 'hbase-server', version: hbaseVersion) {
     exclude(module: 'hbase-annotations')
@@ -55,7 +55,7 @@ dependencies {
     exclude(module: 'commons-codec')
     exclude(module: 'commons-lang')
     exclude(module: 'commons-logging')
-    exclude(module: 'netty')
+    exclude(group: 'io.netty', module: 'netty')
     exclude(module: 'jline')
     exclude(module: 'lz4')
     exclude(module: 'avro')

@@ -3,13 +3,13 @@ description = 'Spark Project External Flume'
 dependencies {
   compile project(subprojectBase + 'snappy-spark-streaming-flume-sink_' + scalaBinaryVersion)
   compile(group: 'org.apache.flume', name: 'flume-ng-core', version:'1.6.0') {
-    exclude(module: 'netty')
+    exclude(group: 'io.netty', module: 'netty')
     exclude(module: 'flume-ng-auth')
     exclude(module: 'libthrift')
     exclude(module: 'servlet-api')
   }
   compile(group: 'org.apache.flume', name: 'flume-ng-sdk', version:'1.6.0') {
-    exclude(module: 'netty')
+    exclude(group: 'io.netty', module: 'netty')
     exclude(module: 'libthrift')
   }
 

@@ -4,14 +4,14 @@ dependencies {
   testCompile group: 'org.slf4j', name: 'slf4j-api', version:slf4jVersion
   testCompile group: 'org.slf4j', name: 'slf4j-log4j12', version:slf4jVersion
   testCompile(group: 'org.apache.hadoop', name: 'hadoop-client', version: hadoopVersion) {
-    exclude(module: 'asm')
-    exclude(module: 'jackson-mapper-asl')
-    exclude(module: 'asm')
-    exclude(module: 'netty')
-    exclude(module: 'commons-logging')
-    exclude(module: 'mockito-all')
-    exclude(module: 'servlet-api-2.5')
-    exclude(module: 'servlet-api')
-    exclude(module: 'junit')
+    exclude(group: 'asm', module: 'asm')
+    exclude(group: 'org.codehaus.jackson', module: 'jackson-mapper-asl')
+    exclude(group: 'org.ow2.asm', module: 'asm')
+    exclude(group: 'org.jboss.netty', module: 'netty')
+    exclude(group: 'commons-logging', module: 'commons-logging')
+    exclude(group: 'org.mockito', module: 'mockito-all')
+    exclude(group: 'org.mortbay.jetty', module: 'servlet-api-2.5')
+    exclude(group: 'javax.servlet', module: 'servlet-api')
+    exclude(group: 'junit', module: 'junit')
   }
 }
