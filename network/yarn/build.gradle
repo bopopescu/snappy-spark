@@ -3,12 +3,17 @@ description = 'Spark Project YARN Shuffle Service'
 dependencies {
   compile project(subprojectBase + 'snappy-spark-network-shuffle_' + scalaBinaryVersion)
 
-  compile(group: 'org.apache.hadoop', name: 'hadoop-yarn-api', version: hadoopVersion) {
-    exclude(module: 'servlet-api')
+  compile(group: 'org.apache.hadoop', name: 'hadoop-client', version: hadoopVersion) {
     exclude(group: 'asm', module: 'asm')
+    exclude(group: 'org.codehaus.jackson', module: 'jackson-core-asl')
+    exclude(group: 'org.codehaus.jackson', module: 'jackson-mapper-asl')
     exclude(group: 'org.ow2.asm', module: 'asm')
-    exclude(module: 'netty')
-    exclude(module: 'commons-logging')
+    exclude(group: 'org.jboss.netty', module: 'netty')
+    exclude(group: 'commons-logging', module: 'commons-logging')
+    exclude(group: 'org.mockito', module: 'mockito-all')
+    exclude(group: 'org.mortbay.jetty', module: 'servlet-api-2.5')
+    exclude(group: 'javax.servlet', module: 'servlet-api')
+    exclude(group: 'junit', module: 'junit')
   }
 }
 

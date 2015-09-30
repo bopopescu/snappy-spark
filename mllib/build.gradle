@@ -6,19 +6,11 @@ dependencies {
   compile project(subprojectBase + 'snappy-spark-sql_' + scalaBinaryVersion)
   compile project(subprojectBase + 'snappy-spark-graphx_' + scalaBinaryVersion)
 
-  compile group: 'com.github.rwl', name: 'jtransforms', version: '2.4.0'
   compile(group: 'org.scalanlp', name: 'breeze_' + scalaBinaryVersion, version: '0.11.2') {
     exclude(module: 'junit')
     exclude(module: 'commons-math3')
   }
-  compile(group: 'org.scalanlp', name: 'breeze-macros_' + scalaBinaryVersion, version: '0.11.2') {
-    exclude(module: 'junit')
-    exclude(module: 'commons-math3')
-  }
-  compile(group: 'org.jpmml', name: 'pmml-schema', version: '1.1.15') {
-    exclude(module: 'FastInfoset')
-    exclude(module: 'istack-commons-runtime')
-  }
+  compile group: 'org.apache.commons', name: 'commons-math3', version: '3.4.1'
   compile(group: 'org.jpmml', name: 'pmml-model', version: '1.1.15') {
     exclude(module: 'FastInfoset')
     exclude(module: 'istack-commons-runtime')

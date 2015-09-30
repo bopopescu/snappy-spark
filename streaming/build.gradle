@@ -6,6 +6,10 @@ dependencies {
   compile group: 'com.101tec', name: 'zkclient', version: '0.3'
 
   testCompile project(path: subprojectBase + 'snappy-spark-core_' + scalaBinaryVersion, configuration: 'testOutput')
+  testCompile(group: 'org.seleniumhq.selenium', name: 'selenium-java', version: '2.42.2') {
+    exclude(group: 'com.google.guava', module: 'guava')
+    exclude(group: 'io.netty', module: 'netty')
+  }
 }
 
 // fix scala+java mix to use scala first for tests

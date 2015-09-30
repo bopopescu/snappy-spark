@@ -4,6 +4,8 @@ dependencies {
   compile project(subprojectBase + 'snappy-spark-core_' + scalaBinaryVersion)
   compile project(subprojectBase + 'snappy-spark-sql_' + scalaBinaryVersion)
 
+  compile group: 'org.scala-lang', name: 'scala-compiler', version: scalaVersion
+  compile group: 'org.slf4j', name: 'jul-to-slf4j', version: slf4jVersion
   if (scalaVersion == "2.10") {
     compile group: 'org.scala-lang', name: 'jline', version:scalaVersion
   }

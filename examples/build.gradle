@@ -39,7 +39,6 @@ dependencies {
     exclude(module: 'hadoop-hdfs')
     exclude(module: 'hbase-hadoop1-compat')
     exclude(module: 'commons-math')
-    exclude(module: 'jersey-core')
     exclude(module: 'slf4j-api')
     exclude(module: 'jersey-server')
     exclude(module: 'jersey-core')
@@ -48,22 +47,6 @@ dependencies {
   }
   compile group: 'org.apache.hbase', name: 'hbase-hadoop-compat', version: hbaseVersion
   compile group: 'com.twitter', name: 'algebird-core_' + scalaBinaryVersion, version: '0.9.0'
-  compile group: 'commons-cli', name: 'commons-cli', version: '1.2'
-  compile(group: 'org.apache.cassandra', name: 'cassandra-thrift', version: '1.2.6') {
-    exclude(module: 'guava')
-    exclude(module: 'concurrentlinkedhashmap-lru')
-    exclude(module: 'compress-lzf')
-    exclude(module: 'commons-cli')
-    exclude(module: 'commons-codec')
-    exclude(module: 'commons-lang')
-    exclude(module: 'commons-logging')
-    exclude(module: 'netty')
-    exclude(module: 'jline')
-    exclude(module: 'lz4')
-    exclude(module: 'avro')
-    exclude(module: 'commons-math3')
-    exclude(module: 'libthrift')
-  }
   compile(group: 'org.apache.cassandra', name: 'cassandra-all', version: '1.2.6') {
     exclude(module: 'guava')
     exclude(module: 'concurrentlinkedhashmap-lru')
@@ -79,20 +62,12 @@ dependencies {
     exclude(module: 'commons-math3')
     exclude(module: 'libthrift')
   }
-  compile(group: 'org.apache.kafka', name: 'kafka-clients', version: '0.8.2.1') {
-    exclude(module: 'jmxri')
-    exclude(module: 'jmxtools')
-    exclude(module: 'jopt-simple')
-    exclude(module: 'slf4j-simple')
-    exclude(module: 'zookeeper')
-  }
   compile group: 'com.github.scopt', name: 'scopt_' + scalaBinaryVersion, version: '3.2.0'
 
   provided(group: 'org.apache.commons', name: 'commons-math3', version: '3.4.1')
   provided(group: 'org.scala-lang', name: 'scala-library', version: scalaVersion)
 
-  testCompile group: 'org.apache.hbase', name: 'hbase-hadoop-compat', version: '0.98.7-hadoop2'
-  testCompile group: 'org.scalacheck', name: 'scalacheck_' + scalaBinaryVersion, version: '1.11.3'
+  testCompile group: 'org.apache.hbase', name: 'hbase-hadoop-compat', version: hbaseVersion
 }
 
 // TODO: handle multiple profiles in this with scope change to provided; install, deploy and shade plugins

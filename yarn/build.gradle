@@ -31,9 +31,6 @@ dependencies {
     exclude(module: 'servlet-api')
     exclude(module: 'commons-logging')
   }
-  compile(group: 'org.mortbay.jetty', name: 'jetty', version:'6.1.26') {
-    exclude(module: 'servlet-api')
-  }
 
   testCompile project(subprojectBase + 'snappy-spark-network-yarn_' + scalaBinaryVersion)
   testCompile project(path: subprojectBase + 'snappy-spark-core_' + scalaBinaryVersion, configuration: 'testOutput')
@@ -46,6 +43,9 @@ dependencies {
     exclude(module: 'netty')
     exclude(module: 'servlet-api')
     exclude(module: 'commons-logging')
+  }
+  testCompile(group: 'org.mortbay.jetty', name: 'jetty', version:'6.1.26') {
+    exclude(module: 'servlet-api')
   }
   testCompile group: 'com.sun.jersey', name: 'jersey-core', version:'1.9'
   testCompile group: 'com.sun.jersey', name: 'jersey-server', version:'1.9'

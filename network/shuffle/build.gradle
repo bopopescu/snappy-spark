@@ -5,8 +5,10 @@ dependencies {
 
   compile group: 'org.fusesource.leveldbjni', name: 'leveldbjni-all', version:'1.8'
   compile group: 'com.fasterxml.jackson.core', name: 'jackson-databind', version:'2.4.4'
+  compile group: 'com.fasterxml.jackson.core', name: 'jackson-annotations', version:'2.4.4'
 
   provided 'org.slf4j:slf4j-api:' + slf4jVersion
 
   testCompile project(path: subprojectBase + 'snappy-spark-network-common_' + scalaBinaryVersion, configuration: 'testOutput')
+  testCompile group: 'log4j', name: 'log4j', version: '1.2.17'
 }

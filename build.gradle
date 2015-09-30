@@ -65,10 +65,7 @@ allprojects {
 
   dependencies {
     compile 'org.scala-lang:scala-library:' + scalaVersion
-    compile 'org.scala-lang:scala-compiler:' + scalaVersion
     compile 'org.scala-lang:scala-reflect:' + scalaVersion
-    compile 'org.scala-lang:scala-actors:' + scalaVersion
-    compile 'org.scala-lang:scalap:' + scalaVersion
   }
  
   // default output directory like in sbt/maven
@@ -99,17 +96,6 @@ subprojects {
       testOutput {
         extendsFrom testCompile
         description 'a dependency that exposes test artifacts'
-      }
-    }
-
-    // Here we want to disable all transitive dependencies on external artifacts.  This
-    // allows us to lock down library versions.  However, we want project dependencies to
-    // be transitive such that the libraries of a dependent project are automatically included.
-    configurations.all {
-      dependencies.all { dep ->
-        if (dep instanceof ModuleDependency && !(dep instanceof ProjectDependency)) {
-          dep.transitive = false
-        }
       }
     }
 
@@ -147,139 +133,25 @@ subprojects {
   }
 
   dependencies {
-    compile('com.twitter:chill_' + scalaBinaryVersion + ':0.5.0') {
-      exclude(group: 'org.ow2.asm', module: 'asm')
-      exclude(group: 'org.ow2.asm', module: 'asm-commons')
-    }
-    compile('com.twitter:chill-java:0.5.0') {
-      exclude(group: 'org.ow2.asm', module: 'asm')
-      exclude(group: 'org.ow2.asm', module: 'asm-commons')
-    }
-
-    provided 'org.eclipse.jetty:jetty-io:' + jettyVersion
     provided 'org.eclipse.jetty:jetty-http:' + jettyVersion
-    provided 'org.eclipse.jetty:jetty-continuation:' + jettyVersion
     provided 'org.eclipse.jetty:jetty-servlet:' + jettyVersion
     provided 'org.eclipse.jetty:jetty-util:' + jettyVersion
-    provided 'org.eclipse.jetty:jetty-security:' + jettyVersion
     provided 'org.eclipse.jetty:jetty-plus:' + jettyVersion
     provided 'org.eclipse.jetty:jetty-server:' + jettyVersion
     provided 'com.google.guava:guava:14.0.1'
 
-    compile 'org.apache.commons:commons-lang3:3.3.2'
-    compile 'commons-codec:commons-codec:1.10'
-    compile 'org.apache.commons:commons-math3:3.4.1'
+    // This is a dummy dependency that is used along with the shading plug-in
+    // to create effective poms on publishing (see SPARK-3812).
+    compile group: 'org.spark-project.spark', name: 'unused', version:'1.0.0'
 
     compile 'org.slf4j:slf4j-api:' + slf4jVersion
     compile 'org.slf4j:slf4j-log4j12:' + slf4jVersion
-    compile 'org.slf4j:jul-to-slf4j:' + slf4jVersion
-    compile 'org.slf4j:jcl-over-slf4j:' + slf4jVersion
-    compile 'log4j:log4j:1.2.17'
-    compile 'com.google.code.findbugs:jsr305:1.3.9'
-    compile 'com.google.protobuf:protobuf-java:2.5.0'
-    compile 'commons-io:commons-io:2.4'
-    compile 'commons-net:commons-net:2.2'
-    compile 'io.netty:netty-all:4.0.29.Final'
-    compile 'com.typesafe:config:1.2.1'
-    compile 'com.fasterxml.jackson.core:jackson-annotations:2.4.4'
-    compile 'com.fasterxml.jackson.core:jackson-core:2.4.4'
-    compile('com.fasterxml.jackson.module:jackson-module-scala_' + scalaBinaryVersion + ':2.4.4') {
-      exclude(group: 'com.google.guava', module: 'guava')
-    }
-    compile 'com.sun.jersey:jersey-core:1.9'
-    compile 'com.sun.jersey:jersey-server:1.9'
-    compile('com.sun.jersey:jersey-json:1.9') {
-      exclude(group: 'stax', module: 'stax-api')
-    }
-
-    compile 'commons-configuration:commons-configuration:1.6'
-    compile(group: 'org.apache.hadoop', name: 'hadoop-annotations', version: hadoopVersion) {
-      exclude(group: 'asm', module: 'asm')
-      exclude(group: 'org.codehaus.jackson', module: 'jackson-core-asl')
-      exclude(group: 'org.codehaus.jackson', module: 'jackson-mapper-asl')
-      exclude(group: 'org.ow2.asm', module: 'asm')
-      exclude(group: 'org.jboss.netty', module: 'netty')
-      exclude(group: 'commons-logging', module: 'commons-logging')
-      exclude(group: 'org.mockito', module: 'mockito-all')
-      exclude(group: 'org.mortbay.jetty', module: 'servlet-api-2.5')
-      exclude(group: 'javax.servlet', module: 'servlet-api')
-      exclude(group: 'junit', module: 'junit')
-    }
-    compile(group: 'org.apache.hadoop', name: 'hadoop-common', version: hadoopVersion) {
-      exclude(group: 'asm', module: 'asm')
-      exclude(group: 'org.codehaus.jackson', module: 'jackson-core-asl')
-      exclude(group: 'org.codehaus.jackson', module: 'jackson-mapper-asl')
-      exclude(group: 'org.ow2.asm', module: 'asm')
-      exclude(group: 'org.jboss.netty', module: 'netty')
-      exclude(group: 'commons-logging', module: 'commons-logging')
-      exclude(group: 'org.mockito', module: 'mockito-all')
-      exclude(group: 'org.mortbay.jetty', module: 'servlet-api-2.5')
-      exclude(group: 'javax.servlet', module: 'servlet-api')
-      exclude(group: 'junit', module: 'junit')
-    }
-    compile(group: 'org.apache.hadoop', name: 'hadoop-auth', version: hadoopVersion) {
-      exclude(group: 'asm', module: 'asm')
-      exclude(group: 'org.codehaus.jackson', module: 'jackson-core-asl')
-      exclude(group: 'org.codehaus.jackson', module: 'jackson-mapper-asl')
-      exclude(group: 'org.ow2.asm', module: 'asm')
-      exclude(group: 'org.jboss.netty', module: 'netty')
-      exclude(group: 'commons-logging', module: 'commons-logging')
-      exclude(group: 'org.mockito', module: 'mockito-all')
-      exclude(group: 'org.mortbay.jetty', module: 'servlet-api-2.5')
-      exclude(group: 'javax.servlet', module: 'servlet-api')
-      exclude(group: 'junit', module: 'junit')
-    }
-    compile(group: 'org.apache.hadoop', name: 'hadoop-client', version: hadoopVersion) {
-      exclude(group: 'asm', module: 'asm')
-      exclude(group: 'org.codehaus.jackson', module: 'jackson-core-asl')
-      exclude(group: 'org.codehaus.jackson', module: 'jackson-mapper-asl')
-      exclude(group: 'org.ow2.asm', module: 'asm')
-      exclude(group: 'org.jboss.netty', module: 'netty')
-      exclude(group: 'commons-logging', module: 'commons-logging')
-      exclude(group: 'org.mockito', module: 'mockito-all')
-      exclude(group: 'org.mortbay.jetty', module: 'servlet-api-2.5')
-      exclude(group: 'javax.servlet', module: 'servlet-api')
-      exclude(group: 'junit', module: 'junit')
-    }
-    compile(group: 'org.apache.hadoop', name: 'hadoop-mapreduce-client-core', version: hadoopVersion) {
-      exclude(group: 'asm', module: 'asm')
-      exclude(group: 'org.codehaus.jackson', module: 'jackson-core-asl')
-      exclude(group: 'org.codehaus.jackson', module: 'jackson-mapper-asl')
-      exclude(group: 'org.ow2.asm', module: 'asm')
-      exclude(group: 'org.jboss.netty', module: 'netty')
-      exclude(group: 'commons-logging', module: 'commons-logging')
-      exclude(group: 'org.mockito', module: 'mockito-all')
-      exclude(group: 'org.mortbay.jetty', module: 'servlet-api-2.5')
-      exclude(group: 'javax.servlet', module: 'servlet-api')
-      exclude(group: 'junit', module: 'junit')
-    }
-    compile(group: 'net.java.dev.jets3t', name: 'jets3t', version: '0.9.3') {
-      exclude(group: 'commons-logging', module: 'commons-logging')
-    }
-    compile(group: 'org.apache.avro', name: 'avro', version: '1.7.7') {
-      exclude(group: 'org.jboss.netty', module: 'netty')
-      exclude(group: 'org.mortbay.jetty', module: 'jetty')
-      exclude(group: 'org.mortbay.jetty', module: 'jetty-util')
-      exclude(group: 'org.mortbay.jetty', module: 'servlet-api')
-      exclude(group: 'org.apache.velocity', module: 'velocity')
-    }
-    compile(group: 'org.apache.avro', name: 'avro-mapred', version: '1.7.7', classifier:'hadoop2') {
-      exclude(group: 'org.jboss.netty', module: 'netty')
-      exclude(group: 'org.mortbay.jetty', module: 'jetty')
-      exclude(group: 'org.mortbay.jetty', module: 'jetty-util')
-      exclude(group: 'org.mortbay.jetty', module: 'servlet-api')
-      exclude(group: 'org.apache.velocity', module: 'velocity')
-    }
 
     testCompile 'junit:junit:4.10'
     testCompile 'org.scalatest:scalatest_' + scalaBinaryVersion + ':2.2.1'
     testCompile 'org.mockito:mockito-core:1.9.5'
     testCompile 'org.scalacheck:scalacheck_' + scalaBinaryVersion + ':1.11.3'
     testCompile 'com.novocode:junit-interface:0.10'
-    testCompile('org.seleniumhq.selenium:selenium-java:2.42.2') {
-      exclude(group: 'com.google.guava', module: 'guava')
-      exclude(group: 'io.netty', module: 'netty')
-    }
 
     testRuntime 'org.pegdown:pegdown:1.1.0'
   }

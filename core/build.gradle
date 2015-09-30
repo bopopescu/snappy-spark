@@ -6,35 +6,23 @@ dependencies {
   compile project(subprojectBase + 'snappy-spark-network-shuffle_' + scalaBinaryVersion)
   compile project(subprojectBase + 'snappy-spark-unsafe_' + scalaBinaryVersion)
 
-  compile(group: 'org.apache.curator', name: 'curator-framework', version: '2.4.0')
-  compile(group: 'org.apache.curator', name: 'curator-client', version: '2.4.0')
-  compile(group: 'org.apache.curator', name: 'curator-recipes', version: '2.4.0') {
-    exclude(module: 'netty')
+  compile(group: 'org.apache.avro', name: 'avro-mapred', version: '1.7.7', classifier:'hadoop2') {
+    exclude(group: 'org.jboss.netty', module: 'netty')
+    exclude(group: 'org.mortbay.jetty', module: 'jetty')
+    exclude(group: 'org.mortbay.jetty', module: 'jetty-util')
+    exclude(group: 'org.mortbay.jetty', module: 'servlet-api')
+    exclude(group: 'org.apache.velocity', module: 'velocity')
   }
-  compile group: 'org.apache.zookeeper', name: 'zookeeper', version: '3.4.5'
-  compile group: 'org.eclipse.jetty.orbit', name: 'javax.servlet', version: '3.0.0.v201112011016'
-  compile group: 'com.ning', name: 'compress-lzf', version: '1.0.3'
-  compile group: 'org.xerial.snappy', name: 'snappy-java', version: '1.1.1.7'
-  compile group: 'net.jpountz.lz4', name: 'lz4', version: '1.3.0'
-  compile group: 'org.roaringbitmap', name: 'RoaringBitmap', version: '0.4.5'
-  compile group: 'com.typesafe.akka', name: 'akka-actor_' + scalaBinaryVersion, version: akkaVersion
-  compile group: 'com.typesafe.akka', name: 'akka-remote_' + scalaBinaryVersion, version: akkaVersion
-  compile group: 'com.typesafe.akka', name: 'akka-slf4j_' + scalaBinaryVersion, version: akkaVersion
-  compile group: 'com.esotericsoftware.kryo', name: 'kryo', version: 2.21
-  compile group: 'org.json4s', name: 'json4s-core_' + scalaBinaryVersion, version: '3.2.10'
-  compile group: 'org.json4s', name: 'json4s-ast_' + scalaBinaryVersion, version: '3.2.10'
-  compile group: 'org.json4s', name: 'json4s-jackson_' + scalaBinaryVersion, version: '3.2.10'
-  compile group: 'org.codehaus.jackson', name: 'jackson-core-asl', version: '1.9.13'
-  compile group: 'org.codehaus.jackson', name: 'jackson-mapper-asl', version: '1.9.13'
-  compile(group: 'org.apache.mesos', name: 'mesos', version: '0.21.1', classifier:'shaded-protobuf') {
-    exclude(module: 'protobuf-java')
+  compile('com.twitter:chill_' + scalaBinaryVersion + ':0.5.0') {
+    exclude(group: 'org.ow2.asm', module: 'asm')
+    exclude(group: 'org.ow2.asm', module: 'asm-commons')
   }
-  compile(group: 'com.clearspring.analytics', name: 'stream', version: '2.7.0') {
-    exclude(module: 'fastutil')
+  compile('com.twitter:chill-java:0.5.0') {
+    exclude(group: 'org.ow2.asm', module: 'asm')
+    exclude(group: 'org.ow2.asm', module: 'asm-commons')
   }
-  compile(group: 'org.apache.hadoop', name: 'hadoop-hdfs', version: hadoopVersion) {
+  compile(group: 'org.apache.hadoop', name: 'hadoop-client', version: hadoopVersion) {
     exclude(group: 'asm', module: 'asm')
-    exclude(group: 'org.codehaus.jackson', module: 'jackson-core-asl')
     exclude(group: 'org.codehaus.jackson', module: 'jackson-mapper-asl')
     exclude(group: 'org.ow2.asm', module: 'asm')
     exclude(group: 'org.jboss.netty', module: 'netty')
@@ -44,10 +32,51 @@ dependencies {
     exclude(group: 'javax.servlet', module: 'servlet-api')
     exclude(group: 'junit', module: 'junit')
   }
+  compile(group: 'net.java.dev.jets3t', name: 'jets3t', version: '0.9.3') {
+    exclude(group: 'commons-logging', module: 'commons-logging')
+  }
+  compile(group: 'org.apache.curator', name: 'curator-recipes', version: '2.4.0') {
+    exclude(module: 'netty')
+  }
+  compile group: 'org.eclipse.jetty', name: 'jetty-plus', version: jettyVersion
+  compile group: 'org.eclipse.jetty', name: 'jetty-security', version: jettyVersion
+  compile group: 'org.eclipse.jetty', name: 'jetty-util', version: jettyVersion
+  compile group: 'org.eclipse.jetty', name: 'jetty-server', version: jettyVersion
+  compile group: 'org.eclipse.jetty', name: 'jetty-http', version: jettyVersion
+  compile group: 'org.eclipse.jetty', name: 'jetty-continuation', version: jettyVersion
+  compile group: 'org.eclipse.jetty', name: 'jetty-servlet', version: jettyVersion
+  compile group: 'org.eclipse.jetty.orbit', name: 'javax.servlet', version: '3.0.0.v201112011016'
+  compile group: 'org.apache.commons', name: 'commons-lang3', version: '3.3.2'
+  compile group: 'org.apache.commons', name: 'commons-math3', version: '3.4.1'
+  compile group: 'com.google.code.findbugs', name: 'jsr305', version:'1.3.9'
+  compile group: 'org.slf4j', name: 'jul-to-slf4j', version: slf4jVersion
+  compile group: 'org.slf4j', name: 'jcl-over-slf4j', version: slf4jVersion
+  compile group: 'log4j', name:'log4j', version: '1.2.17'
+  compile group: 'com.ning', name: 'compress-lzf', version: '1.0.3'
+  compile group: 'org.xerial.snappy', name: 'snappy-java', version: '1.1.1.7'
+  compile group: 'net.jpountz.lz4', name: 'lz4', version: '1.3.0'
+  compile group: 'org.roaringbitmap', name: 'RoaringBitmap', version: '0.4.5'
+  compile group: 'commons-net', name: 'commons-net', version: '2.2'
+  compile group: 'com.typesafe.akka', name: 'akka-remote_' + scalaBinaryVersion, version: akkaVersion
+  compile group: 'com.typesafe.akka', name: 'akka-slf4j_' + scalaBinaryVersion, version: akkaVersion
+  compile group: 'org.json4s', name: 'json4s-jackson_' + scalaBinaryVersion, version: '3.2.10'
+  compile group: 'com.sun.jersey', name: 'jersey-core', version: '1.9'
+  compile group: 'com.sun.jersey', name: 'jersey-server', version: '1.9'
+  compile(group: 'org.apache.mesos', name: 'mesos', version: '0.21.1', classifier:'shaded-protobuf') {
+    exclude(module: 'protobuf-java')
+  }
+  compile group: 'io.netty', name: 'netty-all', version: '4.0.29.Final'
+  compile(group: 'com.clearspring.analytics', name: 'stream', version: '2.7.0') {
+    exclude(module: 'fastutil')
+  }
   compile group: 'io.dropwizard.metrics', name: 'metrics-core', version: '3.1.2'
   compile group: 'io.dropwizard.metrics', name: 'metrics-jvm', version: '3.1.2'
   compile group: 'io.dropwizard.metrics', name: 'metrics-json', version: '3.1.2'
   compile group: 'io.dropwizard.metrics', name: 'metrics-graphite', version: '3.1.2'
+  compile group: 'com.fasterxml.jackson.core', name: 'jackson-databind', version:'2.4.4'
+  compile(group: 'com.fasterxml.jackson.module', name: 'jackson-module-scala_2.10', version:'2.4.4') {
+    exclude(module: 'guava')
+  }
   compile group: 'org.apache.ivy', name: 'ivy', version: '2.4.0'
   compile group: 'oro', name: 'oro', version: '2.0.8'
   compile(group: 'org.tachyonproject', name: 'tachyon-client', version: '0.7.1') {
@@ -65,26 +94,13 @@ dependencies {
 
   testCompile group: 'com.typesafe.akka', name: 'akka-testkit_' + scalaBinaryVersion, version: akkaVersion
   testCompile group: 'org.apache.derby', name: 'derby', version: '10.10.1.1'
+  testCompile(group: 'org.seleniumhq.selenium', name: 'selenium-java', version: '2.42.2') {
+    exclude(group: 'com.google.guava', module: 'guava')
+  }
   testCompile group: 'xml-apis', name: 'xml-apis', version: '1.4.01'
   testCompile group: 'org.hamcrest', name: 'hamcrest-core', version: '1.3'
   testCompile group: 'org.hamcrest', name: 'hamcrest-library', version: '1.3'
   testCompile group: 'org.apache.curator', name: 'curator-test', version: '2.4.0'
-  testCompile group: 'net.sourceforge.htmlunit', name: 'htmlunit', version: '2.14'
-  testCompile group: 'net.sourceforge.htmlunit', name: 'htmlunit-core-js', version: '2.14'
-  testCompile group: 'org.w3c.css', name: 'sac', version: '1.3'
-  testCompile group: 'org.apache.httpcomponents', name: 'httpclient', version:'4.3.2'
-  testCompile('org.seleniumhq.selenium:selenium-api:2.42.2') {
-    exclude(group: 'com.google.guava', module: 'guava')
-    exclude(group: 'io.netty', module: 'netty')
-  }
-  testCompile('org.seleniumhq.selenium:selenium-htmlunit-driver:2.42.2') {
-    exclude(group: 'com.google.guava', module: 'guava')
-    exclude(group: 'io.netty', module: 'netty')
-  }
-  testCompile('org.seleniumhq.selenium:selenium-support:2.42.2') {
-    exclude(group: 'com.google.guava', module: 'guava')
-    exclude(group: 'io.netty', module: 'netty')
-  }
 }
 
 // TODO: sparkr profile, copy-dependencies target?

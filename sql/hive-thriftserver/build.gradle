@@ -3,7 +3,6 @@ description = 'Spark Project Hive Thrift Server'
 dependencies {
   compile project(subprojectBase + 'snappy-spark-hive_' + scalaBinaryVersion)
 
-  compile group: 'jline', name: 'jline', version: '2.12'
   compile(group: 'org.spark-project.hive', name: 'hive-cli', version: '1.2.1.spark') {
     exclude(module: 'hive-common')
     exclude(module: 'hive-exec')
@@ -59,7 +58,16 @@ dependencies {
     exclude(module: 'log4j')
     exclude(module: 'commons-logging')
   }
+  compile group: 'com.sun.jersey', name: 'jersey-core', version: '1.9'
+  compile group: 'com.sun.jersey', name: 'jersey-server', version: '1.9'
+  compile(group: 'com.sun.jersey', name: 'jersey-json', version: '1.9') {
+    exclude(group: 'stax', module: 'stax-api')
+  }
 
   testCompile project(path: subprojectBase + 'snappy-spark-core_' + scalaBinaryVersion, configuration: 'testOutput')
   testCompile project(path: subprojectBase + 'snappy-spark-sql_' + scalaBinaryVersion, configuration: 'testOutput')
+  testCompile(group: 'org.seleniumhq.selenium', name: 'selenium-java', version: '2.42.2') {
+    exclude(group: 'com.google.guava', module: 'guava')
+    exclude(group: 'io.netty', module: 'netty')
+  }
 }

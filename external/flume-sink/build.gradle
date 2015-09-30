@@ -1,9 +1,6 @@
 description = 'Spark Project External Flume Sink'
 
 dependencies {
-  compile group: 'org.codehaus.jackson', name: 'jackson-core-asl', version: '1.9.13'
-  compile group: 'org.codehaus.jackson', name: 'jackson-mapper-asl', version: '1.9.13'
-  compile group: 'io.netty', name: 'netty', version: '3.4.0.Final'
   compile(group: 'org.apache.flume', name: 'flume-ng-sdk', version:'1.6.0') {
     exclude(module: 'guava')
     exclude(module: 'libthrift')
@@ -12,17 +9,8 @@ dependencies {
     exclude(module: 'guava')
     exclude(module: 'libthrift')
   }
-  compile(group: 'org.apache.flume', name: 'flume-ng-configuration', version:'1.6.0') {
-    exclude(module: 'guava')
-    exclude(module: 'libthrift')
-  }
-  compile(group: 'org.apache.avro', name: 'avro-ipc', version: '1.7.7') {
-    exclude(group: 'org.jboss.netty', module: 'netty')
-    exclude(group: 'org.mortbay.jetty', module: 'jetty')
-    exclude(group: 'org.mortbay.jetty', module: 'jetty-util')
-    exclude(group: 'org.mortbay.jetty', module: 'servlet-api')
-    exclude(group: 'org.apache.velocity', module: 'velocity')
-  }
+
+  testCompile group: 'io.netty', name: 'netty', version:'3.4.0.Final'
 }
 
 apply plugin: "com.commercehub.gradle.plugin.avro"

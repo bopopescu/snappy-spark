@@ -3,6 +3,8 @@ description = 'Spark Project Tools'
 dependencies {
   compile project(subprojectBase + 'snappy-spark-core_' + scalaBinaryVersion)
   compile project(subprojectBase + 'snappy-spark-streaming_' + scalaBinaryVersion)
+
+  compile group: 'org.scala-lang', name: 'scala-compiler', version: scalaVersion
 }
 
 // TODO: anything special required for deploy, install and source plugins in maven?

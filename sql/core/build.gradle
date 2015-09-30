@@ -4,11 +4,8 @@ dependencies {
   compile project(subprojectBase + 'snappy-spark-core_' + scalaBinaryVersion)
   compile project(subprojectBase + 'snappy-spark-catalyst_' + scalaBinaryVersion)
 
-  compile group: 'org.apache.parquet', name: 'parquet-common', version:'1.7.0'
   compile group: 'org.apache.parquet', name: 'parquet-column', version:'1.7.0'
-  compile group: 'org.apache.parquet', name: 'parquet-encoding', version:'1.7.0'
   compile group: 'org.apache.parquet', name: 'parquet-hadoop', version:'1.7.0'
-  compile group: 'org.apache.parquet', name: 'parquet-format', version:'2.3.0-incubating'
   compile group: 'com.fasterxml.jackson.core', name: 'jackson-databind', version:'2.4.4'
 
   testCompile project(path: subprojectBase + 'snappy-spark-core_' + scalaBinaryVersion, configuration: 'testOutput')

@@ -3,4 +3,15 @@ description = 'Spark Project Launcher'
 dependencies {
   testCompile group: 'org.slf4j', name: 'slf4j-api', version:slf4jVersion
   testCompile group: 'org.slf4j', name: 'slf4j-log4j12', version:slf4jVersion
+  testCompile(group: 'org.apache.hadoop', name: 'hadoop-client', version: hadoopVersion) {
+    exclude(module: 'asm')
+    exclude(module: 'jackson-mapper-asl')
+    exclude(module: 'asm')
+    exclude(module: 'netty')
+    exclude(module: 'commons-logging')
+    exclude(module: 'mockito-all')
+    exclude(module: 'servlet-api-2.5')
+    exclude(module: 'servlet-api')
+    exclude(module: 'junit')
+  }
 }
