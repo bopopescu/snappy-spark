@@ -10,5 +10,3 @@ dependencies {
   testCompile group: 'org.slf4j', name: 'slf4j-log4j12', version: slf4jVersion
   testCompile group: 'log4j', name: 'log4j', version: '1.2.17'
 }
-
-artifacts.archives packageTests

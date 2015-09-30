@@ -1,11 +1,13 @@
 description = 'Spark Project External Flume'
 
+/*
 configurations {
   netty {
     description 'dependency to resolve multiple netty jar inclusions'
     visible true
   }
 }
+*/
 
 dependencies {
   compile project(subprojectBase + 'snappy-spark-streaming-flume-sink_' + scalaBinaryVersion)
@@ -23,9 +25,11 @@ dependencies {
   provided project(subprojectBase + 'snappy-spark-streaming_' + scalaBinaryVersion)
 
   testCompile project(path: subprojectBase + 'snappy-spark-core_' + scalaBinaryVersion, configuration: 'testOutput')
-  netty group: 'io.netty', name: 'netty', version: '3.5.12.Final'
+  //netty group: 'io.netty', name: 'netty', version: '3.5.12.Final'
 }
 
+sourceSets.test.scala.srcDirs = []
+
 // force required netty jar to be before other referenced netty jars
-sourceSets.test.compileClasspath = configurations.netty + sourceSets.test.compileClasspath
-sourceSets.test.runtimeClasspath = configurations.netty + sourceSets.test.runtimeClasspath
+//sourceSets.test.compileClasspath = configurations.netty + sourceSets.test.compileClasspath
+//sourceSets.test.runtimeClasspath = configurations.netty + sourceSets.test.runtimeClasspath

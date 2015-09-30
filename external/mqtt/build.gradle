@@ -10,5 +10,3 @@ dependencies {
 }
 
 // TODO: descriptor etc in maven build?
-
-artifacts.archives packageTests

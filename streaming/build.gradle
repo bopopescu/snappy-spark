@@ -17,5 +17,3 @@ sourceSets.test.scala.srcDir "src/test/java"
 sourceSets.test.java.srcDirs = []
 
 // TODO: shadeTestJar in maven?
-
-artifacts.archives packageTests

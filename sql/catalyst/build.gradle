@@ -8,5 +8,3 @@ dependencies {
 
   testCompile project(path: subprojectBase + 'snappy-spark-core_' + scalaBinaryVersion, configuration: 'testOutput')
 }
-
-artifacts.archives packageTests
