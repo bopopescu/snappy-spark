@@ -3,8 +3,6 @@ description = 'Spark Project Streaming'
 dependencies {
   compile project(subprojectBase + 'snappy-spark-core_' + scalaBinaryVersion)
 
-  compile group: 'com.101tec', name: 'zkclient', version: '0.3'
-
   testCompile project(path: subprojectBase + 'snappy-spark-core_' + scalaBinaryVersion, configuration: 'testOutput')
   testCompile(group: 'org.seleniumhq.selenium', name: 'selenium-java', version: '2.42.2') {
     exclude(group: 'com.google.guava', module: 'guava')
@@ -15,5 +13,3 @@ dependencies {
 // fix scala+java mix to use scala first for tests
 sourceSets.test.scala.srcDir "src/test/java"
 sourceSets.test.java.srcDirs = []
-
-// TODO: shadeTestJar in maven?

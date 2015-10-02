@@ -1,7 +1,7 @@
 description = 'Spark Project External Kafka'
 
 dependencies {
-  provided project(subprojectBase + 'snappy-spark-streaming_' + scalaBinaryVersion)
+  compile project(subprojectBase + 'snappy-spark-streaming_' + scalaBinaryVersion)
 
   compile(group: 'org.apache.kafka', name: 'kafka_' + scalaBinaryVersion, version: '0.8.2.1') {
     exclude(module: 'jmxri')

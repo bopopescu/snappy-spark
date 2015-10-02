@@ -1,17 +1,19 @@
 description = 'Spark Project External Flume Sink'
 
 dependencies {
+  compile group: 'io.netty', name: 'netty', version: akkaNettyVersion
   compile(group: 'org.apache.flume', name: 'flume-ng-sdk', version:'1.6.0') {
+    exclude(group: 'io.netty', module: 'netty')
     exclude(module: 'guava')
     exclude(module: 'libthrift')
   }
   compile(group: 'org.apache.flume', name: 'flume-ng-core', version:'1.6.0') {
+    exclude(group: 'io.netty', module: 'netty')
     exclude(module: 'guava')
     exclude(module: 'libthrift')
   }
 
   testCompile group: 'com.google.guava', name: 'guava', version: '14.0.1'
-  testCompile group: 'io.netty', name: 'netty', version: '3.5.12.Final'
 }
 
 apply plugin: "com.commercehub.gradle.plugin.avro"
@@ -34,5 +36,3 @@ task genAvroJava(type: com.commercehub.gradle.plugin.avro.GenerateAvroJavaTask) 
 }
 compileJava.source genAvroJava.outputs.files, sourceSets.main.java
 */
-
-// TODO: also the shade plugin in maven

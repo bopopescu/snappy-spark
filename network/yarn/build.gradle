@@ -16,5 +16,3 @@ dependencies {
     exclude(group: 'junit', module: 'junit')
   }
 }
-
-// TODO: shade task in maven

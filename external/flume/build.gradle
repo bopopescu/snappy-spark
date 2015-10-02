@@ -1,16 +1,8 @@
 description = 'Spark Project External Flume'
 
-/*
-configurations {
-  netty {
-    description 'dependency to resolve multiple netty jar inclusions'
-    visible true
-  }
-}
-*/
-
 dependencies {
   compile project(subprojectBase + 'snappy-spark-streaming-flume-sink_' + scalaBinaryVersion)
+  compile group: 'io.netty', name: 'netty', version: akkaNettyVersion
   compile(group: 'org.apache.flume', name: 'flume-ng-core', version:'1.6.0') {
     exclude(group: 'io.netty', module: 'netty')
     exclude(module: 'flume-ng-auth')
@@ -22,14 +14,7 @@ dependencies {
     exclude(module: 'libthrift')
   }
 
-  provided project(subprojectBase + 'snappy-spark-streaming_' + scalaBinaryVersion)
+  compile project(subprojectBase + 'snappy-spark-streaming_' + scalaBinaryVersion)
 
   testCompile project(path: subprojectBase + 'snappy-spark-core_' + scalaBinaryVersion, configuration: 'testOutput')
-  //netty group: 'io.netty', name: 'netty', version: '3.5.12.Final'
 }
-
-sourceSets.test.scala.srcDirs = []
-
-// force required netty jar to be before other referenced netty jars
-//sourceSets.test.compileClasspath = configurations.netty + sourceSets.test.compileClasspath
-//sourceSets.test.runtimeClasspath = configurations.netty + sourceSets.test.runtimeClasspath

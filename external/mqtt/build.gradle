@@ -1,7 +1,7 @@
 description = 'Spark Project External MQTT'
 
 dependencies {
-  provided project(subprojectBase + 'snappy-spark-streaming_' + scalaBinaryVersion)
+  compile project(subprojectBase + 'snappy-spark-streaming_' + scalaBinaryVersion)
 
   compile group: 'org.eclipse.paho', name: 'org.eclipse.paho.client.mqttv3', version:'1.0.1'
 

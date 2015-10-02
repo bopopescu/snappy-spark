@@ -34,8 +34,6 @@ allprojects {
   apply plugin: 'java'
   apply plugin: 'scala'
   apply plugin: 'maven'
-  apply plugin: 'idea'
-  apply plugin: 'eclipse'
   //apply plugin: "com.github.maiflai.scalatest"
 
   // apply compiler options
@@ -54,8 +52,11 @@ allprojects {
     scalaVersion = scalaBinaryVersion + ".4"
     hadoopVersion = "2.4.1"
     jettyVersion = "8.1.14.v20131031"
-    slf4jVersion = "1.7.10"
+    log4jVersion = "1.2.17"
+    slf4jVersion = "1.7.12"
     akkaVersion = "2.3.11"
+    // the netty version from akka
+    akkaNettyVersion = "3.8.0.Final"
     if (rootProject.name == "snappy-spark") {
       subprojectBase = ":"
     } else {
@@ -89,35 +90,11 @@ subprojects {
     }
 
     configurations {
-      provided {
-        description 'a dependency that is provided externally at runtime'
-        visible true
-      }
       testOutput {
         extendsFrom testCompile
         description 'a dependency that exposes test artifacts'
       }
     }
-
-    idea {
-      module {
-        scopes.PROVIDED.plus += [ configurations.provided ]
-      }
-    }
-    eclipse {
-      classpath {
-        plusConfigurations += [ configurations.provided ]
-      }
-    }
-
-    sourceSets {
-      main.compileClasspath += configurations.provided
-      main.runtimeClasspath -= configurations.provided
-      test.compileClasspath += configurations.provided
-      test.runtimeClasspath += configurations.provided
-    }
-
-    javadoc.classpath += configurations.provided
 
     task packageTests(type: Jar) {
       from sourceSets.test.output
@@ -133,17 +110,12 @@ subprojects {
   }
 
   dependencies {
-    provided 'org.eclipse.jetty:jetty-http:' + jettyVersion
-    provided 'org.eclipse.jetty:jetty-servlet:' + jettyVersion
-    provided 'org.eclipse.jetty:jetty-util:' + jettyVersion
-    provided 'org.eclipse.jetty:jetty-plus:' + jettyVersion
-    provided 'org.eclipse.jetty:jetty-server:' + jettyVersion
-    provided 'com.google.guava:guava:14.0.1'
-
     // This is a dummy dependency that is used along with the shading plug-in
     // to create effective poms on publishing (see SPARK-3812).
-    compile group: 'org.spark-project.spark', name: 'unused', version:'1.0.0'
+    //compile group: 'org.spark-project.spark', name: 'unused', version:'1.0.0'
 
+    compile group: 'com.google.guava', name: 'guava', version: '14.0.1'
+    compile group: 'log4j', name:'log4j', version: log4jVersion
     compile 'org.slf4j:slf4j-api:' + slf4jVersion
     compile 'org.slf4j:slf4j-log4j12:' + slf4jVersion
 

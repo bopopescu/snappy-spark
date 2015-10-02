@@ -20,15 +20,12 @@ include ':snappy-spark-assembly_' + scalaBinaryVersion
 include ':snappy-spark-streaming-twitter_' + scalaBinaryVersion
 include ':snappy-spark-streaming-flume_' + scalaBinaryVersion
 include ':snappy-spark-streaming-flume-sink_' + scalaBinaryVersion
-include ':snappy-spark-streaming-flume-assembly_' + scalaBinaryVersion
 include ':snappy-spark-streaming-mqtt_' + scalaBinaryVersion
-include ':snappy-spark-streaming-mqtt-assembly_' + scalaBinaryVersion
 include ':snappy-spark-streaming-zeromq_' + scalaBinaryVersion
 include ':snappy-spark-examples_' + scalaBinaryVersion
 include ':snappy-spark-repl_' + scalaBinaryVersion
 include ':snappy-spark-launcher_' + scalaBinaryVersion
 include ':snappy-spark-streaming-kafka_' + scalaBinaryVersion
-include ':snappy-spark-streaming-kafka-assembly_' + scalaBinaryVersion
 
 project(':snappy-spark-core_' + scalaBinaryVersion).projectDir = "$rootDir/core" as File
 project(':snappy-spark-bagel_' + scalaBinaryVersion).projectDir = "$rootDir/bagel" as File
@@ -49,12 +46,9 @@ project(':snappy-spark-assembly_' + scalaBinaryVersion).projectDir = "$rootDir/a
 project(':snappy-spark-streaming-twitter_' + scalaBinaryVersion).projectDir = "$rootDir/external/twitter" as File
 project(':snappy-spark-streaming-flume_' + scalaBinaryVersion).projectDir = "$rootDir/external/flume" as File
 project(':snappy-spark-streaming-flume-sink_' + scalaBinaryVersion).projectDir = "$rootDir/external/flume-sink" as File
-project(':snappy-spark-streaming-flume-assembly_' + scalaBinaryVersion).projectDir = "$rootDir/external/flume-assembly" as File
 project(':snappy-spark-streaming-mqtt_' + scalaBinaryVersion).projectDir = "$rootDir/external/mqtt" as File
-project(':snappy-spark-streaming-mqtt-assembly_' + scalaBinaryVersion).projectDir = "$rootDir/external/mqtt-assembly" as File
 project(':snappy-spark-streaming-zeromq_' + scalaBinaryVersion).projectDir = "$rootDir/external/zeromq" as File
 project(':snappy-spark-examples_' + scalaBinaryVersion).projectDir = "$rootDir/examples" as File
 project(':snappy-spark-repl_' + scalaBinaryVersion).projectDir = "$rootDir/repl" as File
 project(':snappy-spark-launcher_' + scalaBinaryVersion).projectDir = "$rootDir/launcher" as File
 project(':snappy-spark-streaming-kafka_' + scalaBinaryVersion).projectDir = "$rootDir/external/kafka" as File
-project(':snappy-spark-streaming-kafka-assembly_' + scalaBinaryVersion).projectDir = "$rootDir/external/kafka-assembly" as File

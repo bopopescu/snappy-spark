@@ -5,7 +5,7 @@ dependencies {
     exclude(module: 'akka-actor_' + scalaBinaryVersion)
   }
 
-  provided project(subprojectBase + 'snappy-spark-streaming_' + scalaBinaryVersion)
+  compile project(subprojectBase + 'snappy-spark-streaming_' + scalaBinaryVersion)
 
   testCompile project(path: subprojectBase + 'snappy-spark-core_' + scalaBinaryVersion, configuration: 'testOutput')
 }
