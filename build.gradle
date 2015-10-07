@@ -32,7 +32,7 @@ allprojects {
 
   apply plugin: 'scala'
   apply plugin: 'maven'
-  //apply plugin: "com.github.maiflai.scalatest"
+  //apply plugin: 'com.github.maiflai.scalatest'
 
   // apply compiler options
   sourceCompatibility = 1.7
@@ -42,23 +42,24 @@ allprojects {
   compileScala.options.encoding = 'UTF-8'
   compileJava.options.compilerArgs << '-Xlint:all,-serial,-path'
 
-  group = "org.apache.spark"
-  version = "1.5.0-SNAPSHOT.1"
+  group = 'org.apache.spark'
+  version = '1.5.0-SNAPSHOT.1'
 
   ext {
-    scalaBinaryVersion = "2.10"
-    scalaVersion = scalaBinaryVersion + ".4"
-    hadoopVersion = "2.4.1"
-    jettyVersion = "8.1.14.v20131031"
-    log4jVersion = "1.2.17"
-    slf4jVersion = "1.7.12"
-    akkaVersion = "2.3.11"
+    scalaBinaryVersion = '2.10'
+    scalaVersion = scalaBinaryVersion + '.4'
+    hadoopVersion = '2.4.1'
+    jettyVersion = '8.1.14.v20131031'
+    log4jVersion = '1.2.17'
+    slf4jVersion = '1.7.12'
+    junitVersion = '4:10'
+    akkaVersion = '2.3.11'
     // the netty version from akka
-    akkaNettyVersion = "3.8.0.Final"
-    if (rootProject.name == "snappy-spark") {
-      subprojectBase = ":"
+    akkaNettyVersion = '3.8.0.Final'
+    if (rootProject.name == 'snappy-spark') {
+      subprojectBase = ':'
     } else {
-      subprojectBase = ":snappy-spark:"
+      subprojectBase = ':snappy-spark:'
     }
   }
 
@@ -68,12 +69,12 @@ allprojects {
   }
  
   // default output directory like in sbt/maven
-  buildDir = "build-artifacts/scala-" + scalaBinaryVersion
+  buildDir = 'build-artifacts/scala-' + scalaBinaryVersion
 }
 
 subprojects {
   // when invoking from snappy-commons, below are already defined at top-level
-  if (rootProject.name == "snappy-spark") {
+  if (rootProject.name == 'snappy-spark') {
     task packageSources(type: Jar, dependsOn: classes) {
       classifier = 'sources'
       from sourceSets.main.allSource
@@ -104,7 +105,7 @@ subprojects {
   }
 
   // fix scala+java mix to all use compileScala which use correct dependency order
-  sourceSets.main.scala.srcDir "src/main/java"
+  sourceSets.main.scala.srcDir 'src/main/java'
   sourceSets.main.java.srcDirs = []
 
   dependencies {
@@ -117,7 +118,7 @@ subprojects {
     compile 'org.slf4j:slf4j-api:' + slf4jVersion
     compile 'org.slf4j:slf4j-log4j12:' + slf4jVersion
 
-    testCompile 'junit:junit:4.11'
+    testCompile "junit:junit:${junitVersion}"
     testCompile 'org.scalatest:scalatest_' + scalaBinaryVersion + ':2.2.1'
     testCompile 'org.mockito:mockito-core:1.9.5'
     testCompile 'org.scalacheck:scalacheck_' + scalaBinaryVersion + ':1.11.3'
