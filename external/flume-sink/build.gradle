@@ -1,3 +1,7 @@
+plugins {
+  id "com.commercehub.gradle.plugin.avro" version "0.5.0"
+}
+
 description = 'Spark Project External Flume Sink'
 
 dependencies {
@@ -15,8 +19,6 @@ dependencies {
 
   testCompile group: 'com.google.guava', name: 'guava', version: '14.0.1'
 }
-
-apply plugin: "com.commercehub.gradle.plugin.avro"
 
 // for compatibility with maven generated code, though default "string" seems
 // more efficient requiring no conversions

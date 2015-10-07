@@ -33,7 +33,7 @@ conf/*.xml
 conf/slaves
 docs/_site
 docs/api
-target/
+build-artifacts/
 reports/
 .project
 .classpath
