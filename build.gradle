@@ -30,7 +30,6 @@ allprojects {
     maven { url "http://repository.apache.org/snapshots" }
   }
 
-  apply plugin: 'java'
   apply plugin: 'scala'
   apply plugin: 'maven'
   //apply plugin: "com.github.maiflai.scalatest"
