@@ -83,10 +83,12 @@ subprojects {
       classifier = 'sources'
       from javadoc.destinationDir
     }
+    /*
     artifacts {
       archives packageSources
-      //archives packageDocs
+      archives packageDocs
     }
+    */
 
     configurations {
       testOutput {
