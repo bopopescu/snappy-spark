@@ -18,7 +18,7 @@ allprojects {
 
   repositories {
     mavenLocal()
-    mavenCentral()
+    jcenter()
     maven { url "https://repository.apache.org/content/repositories/releases" }
     maven { url "https://repository.jboss.org/nexus/content/repositories/releases" }
     maven { url "https://repo.eclipse.org/content/repositories/paho-releases" }
