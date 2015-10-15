@@ -82,7 +82,7 @@ private[spark] class BlockManager(
 
   // Actual storage of where blocks are kept
   private var externalBlockStoreInitialized = false
-  private[spark] val memoryStore = new MemoryStore(this, maxMemory)
+  protected[spark] val memoryStore = new MemoryStore(this, maxMemory)
   private[spark] val diskStore = new DiskStore(this, diskBlockManager)
   private[spark] lazy val externalBlockStore: ExternalBlockStore = {
     externalBlockStoreInitialized = true
@@ -1268,7 +1268,7 @@ private[spark] object BlockManager extends Logging {
   private val ID_GENERATOR = new IdGenerator
 
   /** Return the total amount of storage memory available. */
-  private def getMaxMemory(conf: SparkConf): Long = {
+  def getMaxMemory(conf: SparkConf): Long = {
     val memoryFraction = conf.getDouble("spark.storage.memoryFraction", 0.6)
     val safetyFraction = conf.getDouble("spark.storage.safetyFraction", 0.9)
     (Runtime.getRuntime.maxMemory * memoryFraction * safetyFraction).toLong

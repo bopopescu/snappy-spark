@@ -49,9 +49,9 @@ class ShuffleMemoryManager protected (
     val pageSizeBytes: Long)
   extends Logging {
 
-  private val taskMemory = new mutable.HashMap[Long, Long]()  // taskAttemptId -> memory bytes
+  protected val taskMemory = new mutable.HashMap[Long, Long]()  // taskAttemptId -> memory bytes
 
-  private def currentTaskAttemptId(): Long = {
+  protected def currentTaskAttemptId(): Long = {
     // In case this is called on the driver, return an invalid task attempt id.
     Option(TaskContext.get()).map(_.taskAttemptId()).getOrElse(-1L)
   }
@@ -141,16 +141,26 @@ private[spark] object ShuffleMemoryManager {
   def create(conf: SparkConf, numCores: Int): ShuffleMemoryManager = {
     val maxMemory = ShuffleMemoryManager.getMaxMemory(conf)
     val pageSize = ShuffleMemoryManager.getPageSize(conf, maxMemory, numCores)
-    new ShuffleMemoryManager(maxMemory, pageSize)
+
+    //new ShuffleMemoryManager(maxMemory, pageSize)
+    Class.forName("org.apache.spark.shuffle.SnappyShuffleMemoryManager").
+        getConstructors()(0).
+        newInstance(maxMemory: java.lang.Long, pageSize: java.lang.Long).asInstanceOf[ShuffleMemoryManager]
   }
 
   def create(maxMemory: Long, pageSizeBytes: Long): ShuffleMemoryManager = {
-    new ShuffleMemoryManager(maxMemory, pageSizeBytes)
+//    new ShuffleMemoryManager(maxMemory, pageSizeBytes)
+    Class.forName("org.apache.spark.shuffle.SnappyShuffleMemoryManager").
+        getConstructors()(0).
+        newInstance(maxMemory: java.lang.Long, pageSizeBytes: java.lang.Long).asInstanceOf[ShuffleMemoryManager]
   }
 
   @VisibleForTesting
   def createForTesting(maxMemory: Long): ShuffleMemoryManager = {
-    new ShuffleMemoryManager(maxMemory, 4 * 1024 * 1024)
+    //new ShuffleMemoryManager(maxMemory, 4 * 1024 * 1024)
+    Class.forName("org.apache.spark.shuffle.SnappyShuffleMemoryManager").
+        getConstructors()(0).
+        newInstance(maxMemory: java.lang.Long, 4 * 1024 * 1024L: java.lang.Long).asInstanceOf[ShuffleMemoryManager]
   }
 
   /**
