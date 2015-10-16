@@ -6,7 +6,7 @@ dependencies {
 
   compile group: 'org.scala-lang', name: 'scala-compiler', version: scalaVersion
   compile group: 'org.slf4j', name: 'jul-to-slf4j', version: slf4jVersion
-  if (scalaVersion == "2.10") {
+  if (scalaBinaryVersion == '2.10') {
     compile group: 'org.scala-lang', name: 'jline', version:scalaVersion
   }
 
@@ -16,7 +16,10 @@ dependencies {
   testCompile project(path: subprojectBase + 'snappy-spark-core_' + scalaBinaryVersion, configuration: 'testOutput')
 }
 
-if (scalaVersion == "2.11") {
+if (scalaBinaryVersion == '2.11') {
   compileScala.source 'scala-2.11/src/main/scala', sourceSets.main.scala
   compileTestScala.source 'scala-2.11/src/test/scala', sourceSets.test.scala
+} else {
+  compileScala.source 'scala-2.10/src/main/scala', sourceSets.main.scala
+  compileTestScala.source 'scala-2.10/src/test/scala', sourceSets.test.scala
 }
