@@ -22,7 +22,7 @@ import scala.collection.mutable
 import com.google.common.annotations.VisibleForTesting
 
 import org.apache.spark.unsafe.array.ByteArrayMethods
-import org.apache.spark.{Logging, SparkException, SparkConf, TaskContext}
+import org.apache.spark.{SparkEnv, Logging, SparkException, SparkConf, TaskContext}
 
 /**
  * Allocates a pool of memory to tasks for use in shuffle operations. Each disk-spilling
@@ -143,24 +143,37 @@ private[spark] object ShuffleMemoryManager {
     val pageSize = ShuffleMemoryManager.getPageSize(conf, maxMemory, numCores)
 
     //new ShuffleMemoryManager(maxMemory, pageSize)
-    Class.forName("org.apache.spark.shuffle.SnappyShuffleMemoryManager").
-        getConstructors()(0).
-        newInstance(maxMemory: java.lang.Long, pageSize: java.lang.Long).asInstanceOf[ShuffleMemoryManager]
+    if (conf.getBoolean("spark.snappydata.enabled", false)) {
+      Class.forName("org.apache.spark.shuffle.SnappyShuffleMemoryManager").
+          getConstructors()(0).
+          newInstance(maxMemory: java.lang.Long, pageSize: java.lang.Long).asInstanceOf[ShuffleMemoryManager]
+    } else {
+      new ShuffleMemoryManager(maxMemory, pageSize)
+    }
   }
 
   def create(maxMemory: Long, pageSizeBytes: Long): ShuffleMemoryManager = {
 //    new ShuffleMemoryManager(maxMemory, pageSizeBytes)
-    Class.forName("org.apache.spark.shuffle.SnappyShuffleMemoryManager").
-        getConstructors()(0).
-        newInstance(maxMemory: java.lang.Long, pageSizeBytes: java.lang.Long).asInstanceOf[ShuffleMemoryManager]
+    if (SparkEnv.get.conf.getBoolean("spark.snappydata.enabled", false)) {
+      Class.forName("org.apache.spark.shuffle.SnappyShuffleMemoryManager").
+          getConstructors()(0).
+          newInstance(maxMemory: java.lang.Long, pageSizeBytes: java.lang.Long).asInstanceOf[ShuffleMemoryManager]
+
+    } else {
+      new ShuffleMemoryManager(maxMemory, pageSizeBytes)
+    }
   }
 
   @VisibleForTesting
   def createForTesting(maxMemory: Long): ShuffleMemoryManager = {
     //new ShuffleMemoryManager(maxMemory, 4 * 1024 * 1024)
-    Class.forName("org.apache.spark.shuffle.SnappyShuffleMemoryManager").
-        getConstructors()(0).
-        newInstance(maxMemory: java.lang.Long, 4 * 1024 * 1024L: java.lang.Long).asInstanceOf[ShuffleMemoryManager]
+    if (SparkEnv.get.conf.getBoolean("spark.snappydata.enabled", false)) {
+      Class.forName("org.apache.spark.shuffle.SnappyShuffleMemoryManager").
+          getConstructors()(0).
+          newInstance(maxMemory: java.lang.Long, 4 * 1024 * 1024L: java.lang.Long).asInstanceOf[ShuffleMemoryManager]
+    } else {
+      new ShuffleMemoryManager(maxMemory, 4 * 1024 * 1024)
+    }
   }
 
   /**

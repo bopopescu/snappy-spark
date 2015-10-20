@@ -334,13 +334,16 @@ object SparkEnv extends Logging {
       conf, isDriver)
 
     // NB: blockManager is not valid until initialize() is called later.
-    /*val blockManager = new BlockManager(executorId, rpcEnv, blockManagerMaster,
-      serializer, conf, mapOutputTracker, shuffleManager, blockTransferService, securityManager,
-      numUsableCores)*/
-    val blockManager = Class.forName("org.apache.spark.storage.SnappyBlockManager").
-        getConstructors()(0).newInstance(executorId, rpcEnv, blockManagerMaster,
-      serializer, conf, mapOutputTracker, shuffleManager, blockTransferService, securityManager,
-      numUsableCores:java.lang.Integer).asInstanceOf[BlockManager]
+    val blockManager = if (conf.getBoolean("spark.snappydata.enabled", false)) {
+      Class.forName("org.apache.spark.storage.SnappyBlockManager").
+          getConstructors()(0).newInstance(executorId, rpcEnv, blockManagerMaster,
+        serializer, conf, mapOutputTracker, shuffleManager, blockTransferService, securityManager,
+        numUsableCores: java.lang.Integer).asInstanceOf[BlockManager]
+    } else {
+      new BlockManager(executorId, rpcEnv, blockManagerMaster,
+        serializer, conf, mapOutputTracker, shuffleManager, blockTransferService, securityManager,
+        numUsableCores)
+    }
 
     val broadcastManager = new BroadcastManager(isDriver, conf, securityManager)
 
