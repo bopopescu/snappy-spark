@@ -26,6 +26,7 @@ dependencies {
   // explicitly exclude old netty from zookeeper
   compile(group: 'org.apache.zookeeper', name: 'zookeeper', version: '3.4.5') {
     exclude(group: 'org.jboss.netty', module: 'netty')
+    exclude(module: 'jline')
   }
   compile(group: 'org.apache.hadoop', name: 'hadoop-client', version: hadoopVersion) {
     exclude(group: 'asm', module: 'asm')
