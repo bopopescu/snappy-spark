@@ -7,7 +7,7 @@ buildscript {
     maven { url "https://plugins.gradle.org/m2" }
   }
   dependencies {
-    classpath "com.github.maiflai:gradle-scalatest:0.9"
+    classpath "com.github.maiflai:gradle-scalatest:0.10"
   }
 }
 
@@ -32,7 +32,6 @@ allprojects {
 
   apply plugin: 'scala'
   apply plugin: 'maven'
-  //apply plugin: 'com.github.maiflai.scalatest'
 
   // apply compiler options
   sourceCompatibility = 1.7
@@ -58,6 +57,7 @@ allprojects {
     akkaNettyVersion = '3.8.0.Final'
     if (rootProject.name == 'snappy-spark') {
       subprojectBase = ':'
+      testResultsBase = "${rootProject.buildDir}/reports"
     } else {
       subprojectBase = ':snappy-spark:'
     }
@@ -128,4 +128,78 @@ subprojects {
 
     testRuntime 'org.pegdown:pegdown:1.1.0'
   }
+
+  scalaTest {
+    maxParallelForks = 1
+    systemProperties 'test.src.tables': '__not_used__'
+
+    if (rootProject.name == 'snappy-spark') {
+      List<String> suites = []
+      extensions.add(com.github.maiflai.ScalaTestAction.SUITES, suites)
+      extensions.add("suite", { String name -> suites.add(name) } )
+      extensions.add("suites", { String... name -> suites.addAll(name) } )
+
+      // running a single scala suite
+      if (rootProject.hasProperty('singleSuite')) {
+        suite singleSuite
+      }
+      reports.html.destination = file("${testResultsBase}/scalatest")
+      reports.junitXml.destination = file(testResultsBase)
+      binResultsDir = file("${testResultsBase}/scalatest/binary")
+    }
+  }
+  test {
+    jvmArgs '-Xss4096k'
+    maxParallelForks = Runtime.getRuntime().availableProcessors()
+    systemProperties 'spark.master.rest.enabled': 'false',
+      'test.src.tables': 'src'
+
+    if (rootProject.name == 'snappy-spark') {
+      reports.html.destination = file("${testResultsBase}/junit")
+      reports.junitXml.destination = file(testResultsBase)
+      binResultsDir = file("${testResultsBase}/junit/binary")
+
+      def eol = System.getProperty('line.separator')
+      def progress = new File(testResultsBase, "junit-progress.txt")
+      beforeTest { desc ->
+        def now = new Date().format('yyyy-MM-dd HH:mm:ss.SSS Z')
+        progress << "$now Starting test $desc.className $desc.name$eol"
+      }
+      afterTest { desc, result ->
+        def now = new Date().format('yyyy-MM-dd HH:mm:ss.SSS Z')
+        progress << "$now Completed test $desc.className $desc.name with result: ${result.resultType}$eol"
+      }
+    }
+  }
+  check.dependsOn scalaTest
+  // need to do below after graph is ready else it will give an error about
+  // runtimeClaspath being set after being finalized
+  gradle.taskGraph.whenReady({ graph ->
+    tasks.withType(Test).each { test ->
+      test.configure {
+        maxHeapSize '3g'
+        jvmArgs '-XX:+HeapDumpOnOutOfMemoryError', '-XX:MaxPermSize=512M', '-XX:ReservedCodeCacheSize=512m', '-ea'
+        environment 'SPARK_DIST_CLASSPATH': "${sourceSets.test.runtimeClasspath.asPath}",
+          'SPARK_PREPEND_CLASSES': '1',
+          'SPARK_TESTING': '1',
+          'SPARK_SCALA_VERSION': scalaBinaryVersion,
+          'JAVA_HOME': System.getProperty('java.home')
+        systemProperties 'derby.system.durability': 'test',
+          'java.awt.headless': 'true',
+          'java.io.tmpdir': "${rootProject.buildDir}/tmp",
+          'spark.test.home': "${rootProject.buildDir}/snappy",
+          'spark.testing': '1',
+          'spark.ui.enabled': 'false',
+          'spark.ui.showConsoleProgress': 'false',
+          'spark.driver.allowMultipleContexts': 'true',
+          'spark.unsafe.exceptionOnMemoryLeak': 'true'
+
+        workingDir = "${testResultsBase}/output"
+        workingDir.mkdirs()
+
+        testLogging.exceptionFormat = 'full'
+      }
+    }
+  })
 }
+
