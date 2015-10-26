@@ -7,7 +7,7 @@ buildscript {
     maven { url "https://plugins.gradle.org/m2" }
   }
   dependencies {
-    classpath "com.github.maiflai:gradle-scalatest:0.9"
+    classpath "com.github.maiflai:gradle-scalatest:0.10"
   }
 }
 
@@ -32,7 +32,6 @@ allprojects {
 
   apply plugin: 'scala'
   apply plugin: 'maven'
-  //apply plugin: 'com.github.maiflai.scalatest'
 
   // apply compiler options
   sourceCompatibility = 1.7
@@ -56,10 +55,13 @@ allprojects {
     akkaVersion = '2.3.11'
     // the netty version from akka
     akkaNettyVersion = '3.8.0.Final'
+    derbyVersion = '10.10.2.0'
     if (rootProject.name == 'snappy-spark') {
       subprojectBase = ':'
+      testResultsBase = "${rootProject.buildDir}/tests"
     } else {
       subprojectBase = ':snappy-spark:'
+      testResultsBase = "${rootProject.buildDir}/tests/spark"
     }
   }
 
@@ -128,4 +130,106 @@ subprojects {
 
     testRuntime 'org.pegdown:pegdown:1.1.0'
   }
+
+  if (rootProject.name == 'snappy-spark') {
+    task scalaTest(type: Test) {
+      actions = [ new com.github.maiflai.ScalaTestAction() ]
+
+      List<String> suites = []
+      extensions.add(com.github.maiflai.ScalaTestAction.SUITES, suites)
+      extensions.add("suite", { String name -> suites.add(name) } )
+      extensions.add("suites", { String... name -> suites.addAll(name) } )
+
+      // running a single scala suite
+      if (rootProject.hasProperty('singleSuite')) {
+        suite singleSuite
+      }
+    }
+  }
+  scalaTest {
+    maxParallelForks = 1
+    systemProperties 'test.src.tables': '__not_used__'
+
+    workingDir = "${testResultsBase}/scalatest"
+
+    binResultsDir = file("${workingDir}/binary")
+    reports.html.destination = file("${workingDir}/html")
+    reports.junitXml.destination = file(workingDir)
+  }
+  test {
+    jvmArgs '-Xss4096k'
+    maxParallelForks = Runtime.getRuntime().availableProcessors()
+    systemProperties 'spark.master.rest.enabled': 'false',
+      'test.src.tables': 'src'
+
+    workingDir = "${testResultsBase}/junit"
+
+    binResultsDir = file("${workingDir}/binary")
+    reports.html.destination = file("${workingDir}/html")
+    reports.junitXml.destination = file(workingDir)
+  }
+  // need to do below after graph is ready else it will give an error about
+  // runtimeClaspath being set after being finalized
+  gradle.taskGraph.whenReady({ graph ->
+    tasks.withType(Test).each { test ->
+      test.configure {
+        onlyIf { ! Boolean.getBoolean('skip.tests') }
+
+        maxHeapSize '3g'
+        jvmArgs '-XX:+HeapDumpOnOutOfMemoryError', '-XX:MaxPermSize=512M', '-XX:ReservedCodeCacheSize=512m', '-ea'
+        environment 'SPARK_DIST_CLASSPATH': "${sourceSets.test.runtimeClasspath.asPath}",
+          'SPARK_PREPEND_CLASSES': '1',
+          'SPARK_TESTING': '1',
+          'SPARK_SCALA_VERSION': scalaBinaryVersion,
+          'JAVA_HOME': System.getProperty('java.home')
+        systemProperties 'derby.system.durability': 'test',
+          'java.awt.headless': 'true',
+          'java.io.tmpdir': "${rootProject.buildDir}/tmp",
+          'spark.test.home': "${rootProject.buildDir}/snappy",
+          'spark.testing': '1',
+          'spark.ui.enabled': 'false',
+          'spark.ui.showConsoleProgress': 'false',
+          'spark.driver.allowMultipleContexts': 'true',
+          'spark.unsafe.exceptionOnMemoryLeak': 'true'
+
+        testLogging.exceptionFormat = 'full'
+
+        if (rootProject.name == 'snappy-spark') {
+          def eol = System.getProperty('line.separator')
+          beforeTest { desc ->
+            def now = new Date().format('yyyy-MM-dd HH:mm:ss.SSS Z')
+            def progress = new File(workingDir, "progress.txt")
+            def output = new File(workingDir, "output.txt")
+            progress << "$now Starting test $desc.className $desc.name$eol"
+            output << "${now} STARTING TEST ${desc.className} ${desc.name}${eol}${eol}"
+          }
+          onOutput { desc, event ->
+            def output = new File(workingDir, "output.txt")
+            output  << event.message
+          }
+          afterTest { desc, result ->
+            def now = new Date().format('yyyy-MM-dd HH:mm:ss.SSS Z')
+            def progress = new File(workingDir, "progress.txt")
+            def output = new File(workingDir, "output.txt")
+            progress << "${now} Completed test ${desc.className} ${desc.name} with result: ${result.resultType}${eol}"
+            output << "${eol}${now} COMPLETED TEST ${desc.className} ${desc.name} with result: ${result.resultType}${eol}${eol}"
+            result.exceptions.each { t ->
+              progress << "  EXCEPTION: ${getStackTrace(t)}${eol}"
+              output << "${getStackTrace(t)}${eol}"
+            }
+          }
+        }
+      }
+      test.doFirst {
+        if (rootProject.name == 'snappy-spark') {
+          delete testResultsBase
+          file(testResultsBase).mkdirs()
+        }
+        delete workingDir
+        file(workingDir).mkdirs()
+      }
+    }
+  })
+  check.dependsOn scalaTest
 }
+
