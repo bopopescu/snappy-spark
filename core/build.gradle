@@ -102,7 +102,7 @@ dependencies {
   }
   compile group: 'net.sf.py4j', name: 'py4j', version: '0.8.2.1'
 
-  testCompile 'org.apache.derby:derby:10.10.2.0'
+  testCompile "org.apache.derby:derby:${derbyVersion}"
   testCompile group: 'com.typesafe.akka', name: 'akka-testkit_' + scalaBinaryVersion, version: akkaVersion
   testCompile(group: 'org.seleniumhq.selenium', name: 'selenium-java', version: '2.42.2') {
     exclude(group: 'com.google.guava', module: 'guava')
