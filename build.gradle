@@ -151,11 +151,10 @@ subprojects {
     systemProperties 'test.src.tables': '__not_used__'
 
     workingDir = "${testResultsBase}/scalatest"
-    workingDir.mkdirs()
 
+    binResultsDir = file("${workingDir}/binary")
     reports.html.destination = file("${workingDir}/html")
     reports.junitXml.destination = file(workingDir)
-    binResultsDir = file("${workingDir}/binary")
   }
   test {
     jvmArgs '-Xss4096k'
@@ -164,11 +163,10 @@ subprojects {
       'test.src.tables': 'src'
 
     workingDir = "${testResultsBase}/junit"
-    workingDir.mkdirs()
 
+    binResultsDir = file("${workingDir}/binary")
     reports.html.destination = file("${workingDir}/html")
     reports.junitXml.destination = file(workingDir)
-    binResultsDir = file("${workingDir}/binary")
   }
   // need to do below after graph is ready else it will give an error about
   // runtimeClaspath being set after being finalized
@@ -201,12 +199,24 @@ subprojects {
           beforeTest { desc ->
             def now = new Date().format('yyyy-MM-dd HH:mm:ss.SSS Z')
             def progress = new File(workingDir, "progress.txt")
+            def output = new File(workingDir, "output.txt")
             progress << "$now Starting test $desc.className $desc.name$eol"
+            output << "${now} STARTING TEST ${desc.className} ${desc.name}${eol}${eol}"
+          }
+          onOutput { desc, event ->
+            def output = new File(workingDir, "output.txt")
+            output  << event.message
           }
           afterTest { desc, result ->
             def now = new Date().format('yyyy-MM-dd HH:mm:ss.SSS Z')
             def progress = new File(workingDir, "progress.txt")
-            progress << "$now Completed test $desc.className $desc.name with result: ${result.resultType}$eol"
+            def output = new File(workingDir, "output.txt")
+            progress << "${now} Completed test ${desc.className} ${desc.name} with result: ${result.resultType}${eol}"
+            output << "${eol}${now} COMPLETED TEST ${desc.className} ${desc.name} with result: ${result.resultType}${eol}${eol}"
+            result.exceptions.each { t ->
+              progress << "  EXCEPTION: ${getStackTrace(t)}${eol}"
+              output << "${getStackTrace(t)}${eol}"
+            }
           }
         }
       }
@@ -215,6 +225,8 @@ subprojects {
           delete testResultsBase
           file(testResultsBase).mkdirs()
         }
+        delete workingDir
+        file(workingDir).mkdirs()
       }
     }
   })
