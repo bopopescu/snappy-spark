@@ -6,12 +6,15 @@ dependencies {
   compile(group: 'org.apache.flume', name: 'flume-ng-core', version:'1.6.0') {
     exclude(group: 'io.netty', module: 'netty')
     exclude(module: 'flume-ng-auth')
+    exclude(module: 'guava')
     exclude(module: 'libthrift')
     exclude(module: 'servlet-api')
   }
   compile(group: 'org.apache.flume', name: 'flume-ng-sdk', version:'1.6.0') {
     exclude(group: 'io.netty', module: 'netty')
+    exclude(module: 'guava')
     exclude(module: 'libthrift')
+    exclude(module: 'servlet-api')
   }
 
   compile project(subprojectBase + 'snappy-spark-streaming_' + scalaBinaryVersion)
