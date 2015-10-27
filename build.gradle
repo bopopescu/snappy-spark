@@ -42,7 +42,7 @@ allprojects {
   compileJava.options.compilerArgs << '-Xlint:all,-serial,-path'
 
   group = 'org.apache.spark'
-  version = '1.5.0-SNAPSHOT.1'
+  version = '1.5.1-SNAPSHOT.1'
 
   ext {
     scalaBinaryVersion = '2.10'
