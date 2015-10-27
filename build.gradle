@@ -56,6 +56,12 @@ allprojects {
     // the netty version from akka
     akkaNettyVersion = '3.8.0.Final'
     derbyVersion = '10.10.2.0'
+  }
+
+  // default output directory like in sbt/maven
+  buildDir = 'build-artifacts/scala-' + scalaBinaryVersion
+
+  ext {
     if (rootProject.name == 'snappy-spark') {
       subprojectBase = ':'
       testResultsBase = "${rootProject.buildDir}/tests"
@@ -69,9 +75,24 @@ allprojects {
     compile 'org.scala-lang:scala-library:' + scalaVersion
     compile 'org.scala-lang:scala-reflect:' + scalaVersion
   }
- 
-  // default output directory like in sbt/maven
-  buildDir = 'build-artifacts/scala-' + scalaBinaryVersion
+}
+
+def getStackTrace(def t) {
+  java.io.StringWriter sw = new java.io.StringWriter()
+  java.io.PrintWriter pw = new java.io.PrintWriter(sw)
+  org.codehaus.groovy.runtime.StackTraceUtils.sanitize(t).printStackTrace(pw)
+  return sw.toString()
+}
+
+task cleanSparkScalaTest << {
+  def workingDir = "${testResultsBase}/scalatest"
+  delete workingDir
+  file(workingDir).mkdirs()
+}
+task cleanSparkJUnit << {
+  def workingDir = "${testResultsBase}/junit"
+  delete workingDir
+  file(workingDir).mkdirs()
 }
 
 subprojects {
@@ -147,13 +168,13 @@ subprojects {
     }
   }
   scalaTest {
-    maxParallelForks = 1
+    //maxParallelForks = (2 * Runtime.getRuntime().availableProcessors())
     systemProperties 'test.src.tables': '__not_used__'
 
     workingDir = "${testResultsBase}/scalatest"
 
-    binResultsDir = file("${workingDir}/binary")
-    reports.html.destination = file("${workingDir}/html")
+    binResultsDir = file("${workingDir}/binary/${project.name}")
+    reports.html.destination = file("${workingDir}/html/${project.name}")
     reports.junitXml.destination = file(workingDir)
   }
   test {
@@ -164,8 +185,8 @@ subprojects {
 
     workingDir = "${testResultsBase}/junit"
 
-    binResultsDir = file("${workingDir}/binary")
-    reports.html.destination = file("${workingDir}/html")
+    binResultsDir = file("${workingDir}/binary/${project.name}")
+    reports.html.destination = file("${workingDir}/html/${project.name}")
     reports.junitXml.destination = file(workingDir)
   }
   // need to do below after graph is ready else it will give an error about
@@ -220,16 +241,11 @@ subprojects {
           }
         }
       }
-      test.doFirst {
-        if (rootProject.name == 'snappy-spark') {
-          delete testResultsBase
-          file(testResultsBase).mkdirs()
-        }
-        delete workingDir
-        file(workingDir).mkdirs()
-      }
     }
   })
+  test.dependsOn subprojectBase + 'cleanSparkJUnit'
+  scalaTest.dependsOn subprojectBase + 'cleanSparkScalaTest'
   check.dependsOn scalaTest
 }
 
+check.dependsOn subprojects.check
