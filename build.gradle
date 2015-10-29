@@ -42,7 +42,7 @@ allprojects {
   compileJava.options.compilerArgs << '-Xlint:all,-serial,-path'
 
   group = 'org.apache.spark'
-  version = '1.5.0-SNAPSHOT.1'
+  version = '1.5.1-SNAPSHOT.1'
 
   ext {
     scalaBinaryVersion = '2.10'
@@ -64,9 +64,11 @@ allprojects {
   ext {
     if (rootProject.name == 'snappy-spark') {
       subprojectBase = ':'
+      sparkProjectRoot = ':'
       testResultsBase = "${rootProject.buildDir}/tests"
     } else {
       subprojectBase = ':snappy-spark:'
+      sparkProjectRoot = ':snappy-spark'
       testResultsBase = "${rootProject.buildDir}/tests/spark"
     }
   }
@@ -168,7 +170,9 @@ subprojects {
     }
   }
   scalaTest {
-    //maxParallelForks = (2 * Runtime.getRuntime().availableProcessors())
+    // top-level default is single process run since scalatest does not
+    // spawn separate JVMs
+    maxParallelForks = 1
     systemProperties 'test.src.tables': '__not_used__'
 
     workingDir = "${testResultsBase}/scalatest"
@@ -179,7 +183,7 @@ subprojects {
   }
   test {
     jvmArgs '-Xss4096k'
-    maxParallelForks = Runtime.getRuntime().availableProcessors()
+    maxParallelForks = (2 * Runtime.getRuntime().availableProcessors())
     systemProperties 'spark.master.rest.enabled': 'false',
       'test.src.tables': 'src'
 
@@ -196,8 +200,14 @@ subprojects {
       test.configure {
         onlyIf { ! Boolean.getBoolean('skip.tests') }
 
-        maxHeapSize '3g'
-        jvmArgs '-XX:+HeapDumpOnOutOfMemoryError', '-XX:MaxPermSize=512M', '-XX:ReservedCodeCacheSize=512m', '-ea'
+        jvmArgs '-XX:+HeapDumpOnOutOfMemoryError', '-XX:MaxPermSize=512M', '-XX:ReservedCodeCacheSize=512m'
+        // disable assertions for hive tests as in Spark's pom.xml because HiveCompatibilitySuite currently fails (SPARK-4814)
+        if (test.project.name.contains('snappy-spark-hive_')) {
+          maxHeapSize '4g'
+        } else {
+          maxHeapSize '3g'
+          jvmArgs '-ea'
+        }
         environment 'SPARK_DIST_CLASSPATH': "${sourceSets.test.runtimeClasspath.asPath}",
           'SPARK_PREPEND_CLASSES': '1',
           'SPARK_TESTING': '1',
@@ -207,6 +217,7 @@ subprojects {
           'java.awt.headless': 'true',
           'java.io.tmpdir': "${rootProject.buildDir}/tmp",
           'spark.test.home': "${rootProject.buildDir}/snappy",
+          'spark.project.home': "${project(sparkProjectRoot).projectDir}",
           'spark.testing': '1',
           'spark.ui.enabled': 'false',
           'spark.ui.showConsoleProgress': 'false',

@@ -89,11 +89,13 @@ class HiveSparkSubmitSuite
     // the HiveContext code mistakenly overrides the class loader that contains user classes.
     // For more detail, see sql/hive/src/test/resources/regression-test-SPARK-8489/*scala.
     val testJar = "sql/hive/src/test/resources/regression-test-SPARK-8489/test.jar"
+    val testJarPath = sys.props.get("spark.project.home").map(
+      _ + '/' + testJar).getOrElse(testJar)
     val args = Seq(
       "--conf", "spark.ui.enabled=false",
       "--conf", "spark.master.rest.enabled=false",
       "--class", "Main",
-      testJar)
+      testJarPath)
     runSparkSubmit(args)
   }
 
@@ -139,7 +141,7 @@ class HiveSparkSubmitSuite
     new ProcessOutputCapturer(process.getErrorStream, captureOutput("stderr")).start()
 
     try {
-      val exitCode = failAfter(180.seconds) { process.waitFor() }
+      val exitCode = failAfter(300.seconds) { process.waitFor() }
       if (exitCode != 0) {
         // include logs in output. Note that logging is async and may not have completed
         // at the time this exception is raised

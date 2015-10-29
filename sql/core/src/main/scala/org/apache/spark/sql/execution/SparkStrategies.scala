@@ -31,7 +31,7 @@ import org.apache.spark.sql.types._
 import org.apache.spark.sql.{SQLContext, Strategy, execution}
 
 private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
-  self: SQLContext#SparkPlanner =>
+  self: SparkPlanner =>
 
   object LeftSemiJoin extends Strategy with PredicateHelper {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
@@ -221,7 +221,19 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
             }
 
             val aggregateOperator =
-              if (functionsWithDistinct.isEmpty) {
+              if (aggregateExpressions.map(_.aggregateFunction).exists(!_.supportsPartial)) {
+                if (functionsWithDistinct.nonEmpty) {
+                  sys.error("Distinct columns cannot exist in Aggregate operator containing " +
+                    "aggregate functions which don't support partial aggregation.")
+                } else {
+                  aggregate.Utils.planAggregateWithoutPartial(
+                    groupingExpressions,
+                    aggregateExpressions,
+                    aggregateFunctionMap,
+                    resultExpressions,
+                    planLater(child))
+                }
+              } else if (functionsWithDistinct.isEmpty) {
                 aggregate.Utils.planAggregateWithoutDistinct(
                   groupingExpressions,
                   aggregateExpressions,
@@ -312,8 +324,6 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       if (sqlContext.conf.unsafeEnabled && sqlContext.conf.codegenEnabled &&
         TungstenSort.supportsSchema(child.schema)) {
         execution.TungstenSort(sortExprs, global, child)
-      } else if (sqlContext.conf.externalSortEnabled) {
-        execution.ExternalSort(sortExprs, global, child)
       } else {
         execution.Sort(sortExprs, global, child)
       }

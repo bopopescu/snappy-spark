@@ -40,6 +40,8 @@ class CliSuite extends SparkFunSuite with BeforeAndAfter with Logging {
   val warehousePath = Utils.createTempDir()
   val metastorePath = Utils.createTempDir()
   val scratchDirPath = Utils.createTempDir()
+  val sparkHome = new File(sys.props.getOrElse("spark.test.home",
+    fail("spark.test.home is not set!")))
 
   before {
     warehousePath.delete()
@@ -75,7 +77,7 @@ class CliSuite extends SparkFunSuite with BeforeAndAfter with Logging {
     val queriesString = queries.map(_ + "\n").mkString
 
     val command = {
-      val cliScript = "../../bin/spark-sql".split("/").mkString(File.separator)
+      val cliScript = "./bin/spark-sql".split("/").mkString(File.separator)
       val jdbcUrl = s"jdbc:derby:;databaseName=$metastorePath;create=true"
       s"""$cliScript
          |  --master local
@@ -112,7 +114,7 @@ class CliSuite extends SparkFunSuite with BeforeAndAfter with Logging {
       }
     }
 
-    val process = new ProcessBuilder(command: _*).start()
+    val process = new ProcessBuilder(command: _*).directory(sparkHome).start()
 
     val stdinWriter = new OutputStreamWriter(process.getOutputStream)
     stdinWriter.write(queriesString)
@@ -192,8 +194,9 @@ class CliSuite extends SparkFunSuite with BeforeAndAfter with Logging {
   }
 
   test("Commands using SerDe provided in --jars") {
-    val jarFile =
-      "../hive/src/test/resources/hive-hcatalog-core-0.13.1.jar"
+    val jar = "hive/src/test/resources/hive-hcatalog-core-0.13.1.jar"
+    val jarFile = sys.props.get("spark.project.home").map(
+      _ + "/sql/" + jar).getOrElse("../" + jar)
         .split("/")
         .mkString(File.separator)
 
