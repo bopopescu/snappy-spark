@@ -89,11 +89,13 @@ class HiveSparkSubmitSuite
     // the HiveContext code mistakenly overrides the class loader that contains user classes.
     // For more detail, see sql/hive/src/test/resources/regression-test-SPARK-8489/*scala.
     val testJar = "sql/hive/src/test/resources/regression-test-SPARK-8489/test.jar"
+    val testJarPath = sys.props.get("spark.project.home").map(
+      _ + '/' + testJar).getOrElse(testJar)
     val args = Seq(
       "--conf", "spark.ui.enabled=false",
       "--conf", "spark.master.rest.enabled=false",
       "--class", "Main",
-      testJar)
+      testJarPath)
     runSparkSubmit(args)
   }
 
