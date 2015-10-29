@@ -22,6 +22,7 @@ import scala.collection.mutable
 import com.google.common.annotations.VisibleForTesting
 
 import org.apache.spark.unsafe.array.ByteArrayMethods
+import org.apache.spark.util.Utils
 import org.apache.spark.{SparkEnv, Logging, SparkException, SparkConf, TaskContext}
 
 /**
@@ -141,38 +142,34 @@ private[spark] object ShuffleMemoryManager {
   def create(conf: SparkConf, numCores: Int): ShuffleMemoryManager = {
     val maxMemory = ShuffleMemoryManager.getMaxMemory(conf)
     val pageSize = ShuffleMemoryManager.getPageSize(conf, maxMemory, numCores)
-
-    //new ShuffleMemoryManager(maxMemory, pageSize)
-    if (conf.getBoolean("spark.snappydata.enabled", false)) {
-      Class.forName("org.apache.spark.shuffle.SnappyShuffleMemoryManager").
-          getConstructors()(0).
-          newInstance(maxMemory: java.lang.Long, pageSize: java.lang.Long).asInstanceOf[ShuffleMemoryManager]
-    } else {
-      new ShuffleMemoryManager(maxMemory, pageSize)
-    }
+    getShuffleMemoryManager(conf, maxMemory, pageSize)
   }
 
   def create(maxMemory: Long, pageSizeBytes: Long): ShuffleMemoryManager = {
-//    new ShuffleMemoryManager(maxMemory, pageSizeBytes)
-    if (SparkEnv.get.conf.getBoolean("spark.snappydata.enabled", false)) {
-      Class.forName("org.apache.spark.shuffle.SnappyShuffleMemoryManager").
-          getConstructors()(0).
-          newInstance(maxMemory: java.lang.Long, pageSizeBytes: java.lang.Long).asInstanceOf[ShuffleMemoryManager]
-
-    } else {
+    //env might be null for ex. when called from tests
+    val env = Option(SparkEnv.get)
+    env.map {e => getShuffleMemoryManager(e.conf, maxMemory, pageSizeBytes)
+    }.getOrElse {
       new ShuffleMemoryManager(maxMemory, pageSizeBytes)
     }
   }
 
   @VisibleForTesting
   def createForTesting(maxMemory: Long): ShuffleMemoryManager = {
-    //new ShuffleMemoryManager(maxMemory, 4 * 1024 * 1024)
-    if (SparkEnv.get.conf.getBoolean("spark.snappydata.enabled", false)) {
-      Class.forName("org.apache.spark.shuffle.SnappyShuffleMemoryManager").
-          getConstructors()(0).
-          newInstance(maxMemory: java.lang.Long, 4 * 1024 * 1024L: java.lang.Long).asInstanceOf[ShuffleMemoryManager]
-    } else {
+    //env might be null for ex. when called from tests
+    val env = Option(SparkEnv.get)
+    env.map {e => getShuffleMemoryManager(e.conf, maxMemory, 4 * 1024 * 1024)
+    }.getOrElse {
       new ShuffleMemoryManager(maxMemory, 4 * 1024 * 1024)
+    }
+  }
+
+  def getShuffleMemoryManager(conf: SparkConf, maxMemory: Long, pageSizeBytes: Long): ShuffleMemoryManager = {
+    conf.getOption("spark.shuffleMemoryManager").map { c =>
+      Utils.getContextOrSparkClassLoader.loadClass(c).getConstructor(classOf[Long], classOf[Long]).
+          newInstance(maxMemory: java.lang.Long, pageSizeBytes: java.lang.Long).asInstanceOf[ShuffleMemoryManager]
+    }.getOrElse {
+      new ShuffleMemoryManager(maxMemory, pageSizeBytes)
     }
   }
 
