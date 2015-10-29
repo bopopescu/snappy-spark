@@ -86,6 +86,3 @@ dependencies {
 }
 
 sourceSets.test.scala.srcDirs = ["src/test/scala", "compatibility/src/test/scala"]
-
-// TODO: additional options to scalatest
-// TODO: deploy datanucleus jars task in maven?
