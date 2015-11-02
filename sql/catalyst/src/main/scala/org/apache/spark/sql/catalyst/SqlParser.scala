@@ -76,6 +76,7 @@ class SqlParserBase extends AbstractSparkSQLParser with DataTypeParser {
   protected val ELSE = Keyword("ELSE")
   protected val END = Keyword("END")
   protected val EXCEPT = Keyword("EXCEPT")
+  protected val EXISTS = Keyword("EXISTS")
   protected val FALSE = Keyword("FALSE")
   protected val FROM = Keyword("FROM")
   protected val FULL = Keyword("FULL")
@@ -249,6 +250,18 @@ class SqlParserBase extends AbstractSparkSQLParser with DataTypeParser {
       }
     | termExpression <~ IS ~ NULL ^^ { case e => IsNull(e) }
     | termExpression <~ IS ~ NOT ~ NULL ^^ { case e => IsNotNull(e) }
+    | EXISTS ~> start1 ^^ {
+      case subQuery => Exists(subQuery, positive = true)
+    }
+    | NOT ~> EXISTS ~> start1 ^^ {
+      case subQuery => Exists(subQuery, positive = false)
+    }
+    | termExpression ~ (IN ~> start1) ^^ {
+      case e ~ subQuery => InSubquery(e, subQuery, positive = true)
+    }
+    | termExpression ~ (NOT ~ IN ~> start1) ^^ {
+      case e ~ subQuery => InSubquery(e, subQuery, positive = false)
+    }
     | NOT ~> termExpression ^^ {e => Not(e)}
     | termExpression
     )
