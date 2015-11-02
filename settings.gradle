@@ -1,6 +1,7 @@
 def scalaBinaryVersion = "2.10"
 rootProject.name = 'snappy-spark'
 
+include ':snappy-spark-test-tags_' + scalaBinaryVersion
 include ':snappy-spark-core_' + scalaBinaryVersion
 include ':snappy-spark-bagel_' + scalaBinaryVersion
 include ':snappy-spark-graphx_' + scalaBinaryVersion
@@ -27,6 +28,7 @@ include ':snappy-spark-repl_' + scalaBinaryVersion
 include ':snappy-spark-launcher_' + scalaBinaryVersion
 include ':snappy-spark-streaming-kafka_' + scalaBinaryVersion
 
+project(':snappy-spark-test-tags_' + scalaBinaryVersion).projectDir = "$rootDir/tags" as File
 project(':snappy-spark-core_' + scalaBinaryVersion).projectDir = "$rootDir/core" as File
 project(':snappy-spark-bagel_' + scalaBinaryVersion).projectDir = "$rootDir/bagel" as File
 project(':snappy-spark-graphx_' + scalaBinaryVersion).projectDir = "$rootDir/graphx" as File
