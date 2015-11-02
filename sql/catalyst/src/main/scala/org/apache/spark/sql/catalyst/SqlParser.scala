@@ -250,18 +250,15 @@ class SqlParserBase extends AbstractSparkSQLParser with DataTypeParser {
       }
     | termExpression <~ IS ~ NULL ^^ { case e => IsNull(e) }
     | termExpression <~ IS ~ NOT ~ NULL ^^ { case e => IsNotNull(e) }
-    | EXISTS ~> start1 ^^ {
-      case subQuery => Exists(subQuery, positive = true)
-    }
-    | NOT ~> EXISTS ~> start1 ^^ {
-      case subQuery => Exists(subQuery, positive = false)
-    }
     | termExpression ~ (IN ~> start1) ^^ {
-      case e ~ subQuery => InSubquery(e, subQuery, positive = true)
-    }
+        case e ~ subQuery => InSubquery(e, subQuery, positive = true)
+      }
     | termExpression ~ (NOT ~ IN ~> start1) ^^ {
-      case e ~ subQuery => InSubquery(e, subQuery, positive = false)
-    }
+        case e ~ subQuery => InSubquery(e, subQuery, positive = false)
+      }
+    | termExpression ~ ("=" ~> start1) ^^ {
+        case e ~ subQuery => InSubquery(e, subQuery, positive = true)
+      }
     | NOT ~> termExpression ^^ {e => Not(e)}
     | termExpression
     )
@@ -468,6 +465,10 @@ class SqlParserBase extends AbstractSparkSQLParser with DataTypeParser {
     | (expression <~ ".") ~ ident ^^
       { case base ~ fieldName => UnresolvedExtractValue(base, Literal(fieldName)) }
     | cast
+    | EXISTS ~> start1 ^^
+      { case subQuery => Exists(subQuery, positive = true) }
+    | NOT ~> EXISTS ~> start1 ^^
+      { case subQuery => Exists(subQuery, positive = false) }
     | "(" ~> expression <~ ")"
     | function
     | dotExpressionHeader
