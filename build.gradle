@@ -201,11 +201,12 @@ subprojects {
         onlyIf { ! Boolean.getBoolean('skip.tests') }
 
         jvmArgs '-XX:+HeapDumpOnOutOfMemoryError', '-XX:MaxPermSize=512M', '-XX:ReservedCodeCacheSize=512m'
+        maxHeapSize '3g'
         // disable assertions for hive tests as in Spark's pom.xml because HiveCompatibilitySuite currently fails (SPARK-4814)
         if (test.project.name.contains('snappy-spark-hive_')) {
-          maxHeapSize '4g'
+          jvmArgs '-da'
+          maxParallelForks = 1
         } else {
-          maxHeapSize '3g'
           jvmArgs '-ea'
         }
         environment 'SPARK_DIST_CLASSPATH': "${sourceSets.test.runtimeClasspath.asPath}",
