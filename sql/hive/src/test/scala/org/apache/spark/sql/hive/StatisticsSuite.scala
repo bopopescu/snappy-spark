@@ -45,6 +45,7 @@ class StatisticsSuite extends QueryTest with TestHiveSingleton {
       }
     }
 
+    hiveContext.executionHive.runSqlHive("RESET") // force set the SessionState
     assertAnalyzeCommand(
       "ANALYZE TABLE Table1 COMPUTE STATISTICS",
       classOf[HiveNativeCommand])

@@ -295,11 +295,11 @@ private[hive] object HiveQl extends Logging {
           case errorRegEx(line, start, message) =>
             throw new AnalysisException(message, Some(line.toInt), Some(start.toInt))
           case otherMessage =>
-            throw new AnalysisException(otherMessage)
+            throw new AnalysisException(otherMessage, pe)
         }
       case e: MatchError => throw e
       case e: Exception =>
-        throw new AnalysisException(e.getMessage)
+        throw new AnalysisException(e.getMessage, e)
       case e: NotImplementedError =>
         throw new AnalysisException(
           s"""
