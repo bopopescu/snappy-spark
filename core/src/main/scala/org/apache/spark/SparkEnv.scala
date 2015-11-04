@@ -335,7 +335,7 @@ object SparkEnv extends Logging {
 
     // NB: blockManager is not valid until initialize() is called later.
     val blockManager = conf.getOption("spark.blockManager").map { c =>
-      Utils.getContextOrSparkClassLoader.loadClass(c).getConstructor(
+      Utils.classForName(c).getConstructor(
         classOf[String], classOf[RpcEnv], classOf[BlockManagerMaster], classOf[Serializer],
         classOf[SparkConf], classOf[MapOutputTracker], classOf[ShuffleManager], classOf[BlockTransferService],
         classOf[SecurityManager], classOf[scala.Int]).newInstance(executorId, rpcEnv, blockManagerMaster,

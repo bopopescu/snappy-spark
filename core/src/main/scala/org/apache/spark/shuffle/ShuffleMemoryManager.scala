@@ -166,7 +166,7 @@ private[spark] object ShuffleMemoryManager {
 
   def getShuffleMemoryManager(conf: SparkConf, maxMemory: Long, pageSizeBytes: Long): ShuffleMemoryManager = {
     conf.getOption("spark.shuffleMemoryManager").map { c =>
-      Utils.getContextOrSparkClassLoader.loadClass(c).getConstructor(classOf[Long], classOf[Long]).
+      Utils.classForName(c).getConstructor(classOf[Long], classOf[Long]).
           newInstance(maxMemory: java.lang.Long, pageSizeBytes: java.lang.Long).asInstanceOf[ShuffleMemoryManager]
     }.getOrElse {
       new ShuffleMemoryManager(maxMemory, pageSizeBytes)

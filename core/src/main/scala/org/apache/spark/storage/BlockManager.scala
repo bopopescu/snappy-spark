@@ -82,7 +82,7 @@ private[spark] class BlockManager(
 
   // Actual storage of where blocks are kept
   private var externalBlockStoreInitialized = false
-  protected[spark] val memoryStore = new MemoryStore(this, maxMemory)
+  private[spark] val memoryStore = new MemoryStore(this, maxMemory)
   private[spark] val diskStore = new DiskStore(this, diskBlockManager)
   private[spark] lazy val externalBlockStore: ExternalBlockStore = {
     externalBlockStoreInitialized = true
