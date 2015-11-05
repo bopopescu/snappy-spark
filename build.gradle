@@ -46,7 +46,7 @@ allprojects {
 
   ext {
     scalaBinaryVersion = '2.10'
-    scalaVersion = scalaBinaryVersion + '.4'
+    scalaVersion = scalaBinaryVersion + '.6'
     hadoopVersion = '2.4.1'
     jettyVersion = '8.1.14.v20131031'
     log4jVersion = '1.2.17'
