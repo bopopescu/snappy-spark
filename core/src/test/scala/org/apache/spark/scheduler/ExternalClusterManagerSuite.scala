@@ -46,7 +46,7 @@ class ExternalClusterManagerSuite  extends SparkFunSuite
   }
 
   test("launch of backend and scheduler") {
-    val conf = new SparkConf().setMaster("external:myclusterManager").setAppName("testcm")
+    val conf = new SparkConf().setMaster("myclusterManager").setAppName("testcm")
     val sc = new SparkContext(conf)
     // check if the scheduler components are created
     assert(sc.schedulerBackend.isInstanceOf[LocalBackend])
