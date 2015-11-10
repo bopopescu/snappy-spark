@@ -43,6 +43,7 @@ import org.apache.spark.storage._
 import org.apache.spark.unsafe.memory.{ExecutorMemoryManager, MemoryAllocator}
 import org.apache.spark.util.{RpcUtils, Utils}
 
+
 /**
  * :: DeveloperApi ::
  * Holds all the runtime environment objects for a running Spark instance (either master or worker),
@@ -333,9 +334,18 @@ object SparkEnv extends Logging {
       conf, isDriver)
 
     // NB: blockManager is not valid until initialize() is called later.
-    val blockManager = new BlockManager(executorId, rpcEnv, blockManagerMaster,
-      serializer, conf, mapOutputTracker, shuffleManager, blockTransferService, securityManager,
-      numUsableCores)
+    val blockManager = conf.getOption("spark.blockManager").map { c =>
+      Utils.classForName(c).getConstructor(
+        classOf[String], classOf[RpcEnv], classOf[BlockManagerMaster], classOf[Serializer],
+        classOf[SparkConf], classOf[MapOutputTracker], classOf[ShuffleManager], classOf[BlockTransferService],
+        classOf[SecurityManager], classOf[scala.Int]).newInstance(executorId, rpcEnv, blockManagerMaster,
+        serializer, conf, mapOutputTracker, shuffleManager, blockTransferService, securityManager,
+        numUsableCores: java.lang.Integer).asInstanceOf[BlockManager]
+    }.getOrElse {
+      new BlockManager(executorId, rpcEnv, blockManagerMaster,
+        serializer, conf, mapOutputTracker, shuffleManager, blockTransferService, securityManager,
+        numUsableCores)
+    }
 
     val broadcastManager = new BroadcastManager(isDriver, conf, securityManager)
 

@@ -414,7 +414,7 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
    *
    * Return whether there is enough free space, along with the blocks dropped in the process.
    */
-  private def ensureFreeSpace(
+  protected def ensureFreeSpace(
       blockIdToAdd: BlockId,
       space: Long): ResultWithDroppedBlocks = {
     logInfo(s"ensureFreeSpace($space) called with curMem=$currentMemory, maxMem=$maxMemory")
