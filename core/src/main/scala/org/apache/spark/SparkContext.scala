@@ -2734,7 +2734,7 @@ object SparkContext extends Logging {
         try {
           val scheduler = cm.createTaskScheduler(sc)
           val backend = cm.createSchedulerBackend(sc, scheduler)
-          cm.intialize(scheduler, backend)
+          cm.initialize(scheduler, backend)
           (backend, scheduler)
         } catch {
           case e: Exception => {
