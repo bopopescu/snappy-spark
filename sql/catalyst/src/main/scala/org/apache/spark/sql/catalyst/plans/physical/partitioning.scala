@@ -226,8 +226,8 @@ case class OrderLessHashPartitioning(expressions: Seq[Expression], numPartitions
   }
 
   private def anyOrderEquals(other: HashPartitioning) : Boolean = {
-    other.numPartitions == this.numPartitions && (
-        other.expressions.toSet.subsetOf(this.expressions.toSet) && this.expressions.toSet.subsetOf(other.expressions.toSet))
+    other.numPartitions == this.numPartitions &&
+        (other.expressions.toSet == this.expressions.toSet)
   }
 
   override def compatibleWith(other: Partitioning): Boolean = other match {
