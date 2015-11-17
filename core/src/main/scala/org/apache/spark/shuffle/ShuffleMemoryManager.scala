@@ -26,6 +26,7 @@ import org.apache.spark._
 import org.apache.spark.memory.{StaticMemoryManager, MemoryManager}
 import org.apache.spark.storage.{BlockId, BlockStatus}
 import org.apache.spark.unsafe.array.ByteArrayMethods
+import org.apache.spark.util.Utils
 
 /**
  * Allocates a pool of memory to tasks for use in shuffle operations. Each disk-spilling
@@ -48,13 +49,13 @@ import org.apache.spark.unsafe.array.ByteArrayMethods
  */
 private[spark]
 class ShuffleMemoryManager protected (
-    memoryManager: MemoryManager,
+    val memoryManager: MemoryManager,
     val pageSizeBytes: Long)
   extends Logging {
 
-  private val taskMemory = new mutable.HashMap[Long, Long]()  // taskAttemptId -> memory bytes
+  private[spark] val taskMemory = new mutable.HashMap[Long, Long]()  // taskAttemptId -> memory bytes
 
-  private def currentTaskAttemptId(): Long = {
+  private[spark] def currentTaskAttemptId(): Long = {
     // In case this is called on the driver, return an invalid task attempt id.
     Option(TaskContext.get()).map(_.taskAttemptId()).getOrElse(-1L)
   }
@@ -169,7 +170,7 @@ private[spark] object ShuffleMemoryManager {
       numCores: Int): ShuffleMemoryManager = {
     val maxMemory = memoryManager.maxExecutionMemory
     val pageSize = ShuffleMemoryManager.getPageSize(conf, maxMemory, numCores)
-    new ShuffleMemoryManager(memoryManager, pageSize)
+    getShuffleMemoryManager(conf, memoryManager, pageSize)
   }
 
   /**
@@ -179,12 +180,22 @@ private[spark] object ShuffleMemoryManager {
     val conf = new SparkConf
     val memoryManager = new StaticMemoryManager(
       conf, maxExecutionMemory = maxMemory, maxStorageMemory = Long.MaxValue)
-    new ShuffleMemoryManager(memoryManager, pageSizeBytes)
+    getShuffleMemoryManager(conf, memoryManager, pageSizeBytes)
   }
 
   @VisibleForTesting
   def createForTesting(maxMemory: Long): ShuffleMemoryManager = {
     create(maxMemory, 4 * 1024 * 1024)
+  }
+
+  def getShuffleMemoryManager(conf: SparkConf, memoryManager: MemoryManager,
+      pageSizeBytes: Long): ShuffleMemoryManager = {
+    conf.getOption("spark.shuffleMemoryManager").map { c =>
+      Utils.classForName(c).getConstructor(classOf[MemoryManager], classOf[Long]).
+          newInstance(memoryManager, pageSizeBytes: java.lang.Long).asInstanceOf[ShuffleMemoryManager]
+    }.getOrElse {
+      new ShuffleMemoryManager(memoryManager, pageSizeBytes)
+    }
   }
 
   /**

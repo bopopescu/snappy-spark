@@ -338,7 +338,11 @@ object SparkEnv extends Logging {
     val useLegacyMemoryManager = conf.getBoolean("spark.memory.useLegacyMode", false)
     val memoryManager: MemoryManager =
       if (useLegacyMemoryManager) {
-        new StaticMemoryManager(conf)
+        conf.getOption("spark.staticMemoryManager").map { c => Utils.classForName(c).
+            getConstructor(classOf[SparkConf]).newInstance(conf).asInstanceOf[MemoryManager]
+        }.getOrElse {
+          new StaticMemoryManager(conf)
+        }
       } else {
         new UnifiedMemoryManager(conf)
       }

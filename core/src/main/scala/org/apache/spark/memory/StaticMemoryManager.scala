@@ -31,7 +31,7 @@ import org.apache.spark.storage.{BlockId, BlockStatus}
  * regions are cleanly separated such that neither usage can borrow memory from the other.
  */
 private[spark] class StaticMemoryManager(
-    conf: SparkConf,
+    val conf: SparkConf,
     override val maxExecutionMemory: Long,
     override val maxStorageMemory: Long)
   extends MemoryManager {
@@ -102,7 +102,7 @@ private[spark] class StaticMemoryManager(
    * @param evictedBlocks a holder for blocks evicted in the process
    * @return whether all N bytes were successfully granted.
    */
-  private def acquireStorageMemory(
+  private[spark] def acquireStorageMemory(
       blockId: BlockId,
       numBytesToAcquire: Long,
       numBytesToFree: Long,
@@ -126,7 +126,7 @@ private[spark] object StaticMemoryManager {
   /**
    * Return the total amount of memory available for the storage region, in bytes.
    */
-  private def getMaxStorageMemory(conf: SparkConf): Long = {
+  private[spark] def getMaxStorageMemory(conf: SparkConf): Long = {
     val systemMaxMemory = conf.getLong("spark.testing.memory", Runtime.getRuntime.maxMemory)
     val memoryFraction = conf.getDouble("spark.storage.memoryFraction", 0.6)
     val safetyFraction = conf.getDouble("spark.storage.safetyFraction", 0.9)
@@ -137,7 +137,7 @@ private[spark] object StaticMemoryManager {
   /**
    * Return the total amount of memory available for the execution region, in bytes.
    */
-  private def getMaxExecutionMemory(conf: SparkConf): Long = {
+  private[spark] def getMaxExecutionMemory(conf: SparkConf): Long = {
     val systemMaxMemory = conf.getLong("spark.testing.memory", Runtime.getRuntime.maxMemory)
     val memoryFraction = conf.getDouble("spark.shuffle.memoryFraction", 0.2)
     val safetyFraction = conf.getDouble("spark.shuffle.safetyFraction", 0.8)
