@@ -2579,7 +2579,7 @@ object SparkContext extends Logging {
    * Create a task scheduler based on a given master URL.
    * Return a 2-tuple of the scheduler backend and the task scheduler.
    */
-  private[spark] def createTaskScheduler(
+  private def createTaskScheduler(
       sc: SparkContext,
       master: String): (SchedulerBackend, TaskScheduler) = {
     // Regular expression used for local[N] and local[*] master formats
@@ -2728,28 +2728,29 @@ object SparkContext extends Logging {
         scheduler.initialize(backend)
         (backend, scheduler)
 
-      case externalUrl if externalUrl.startsWith("external:") =>
-        val cm = getClusterManager(externalUrl.stripPrefix("external:"))
+      case masterUrl =>
+        val cm = getClusterManager(masterUrl) match {
+          case Some(clusterMgr) => clusterMgr
+          case None => throw new SparkException("Could not parse Master URL: '" + master + "'")
+        }
         try {
           val scheduler = cm.createTaskScheduler(sc)
           val backend = cm.createSchedulerBackend(sc, scheduler)
-          cm.intialize(scheduler, backend)
+          cm.initialize(scheduler, backend)
           (backend, scheduler)
         } catch {
           case e: Exception => {
             throw new SparkException("External scheduler cannot be instantiated", e)
           }
         }
-      case _ =>
-        throw new SparkException("Could not parse Master URL: '" + master + "'")
     }
   }
 
-  private def getClusterManager(url: String): ExternalClusterManager = {
+  private def getClusterManager(url: String): Option[ExternalClusterManager] = {
     val matchingCMs = registeredClusterManagers.filter(_.canCreate(url))
     matchingCMs.length match {
-      case 0 => throw new SparkException(s"Failed to find an external cluster manager with URL: $url")
-      case _ => matchingCMs.head
+      case 0 => None
+      case _ => Some(matchingCMs.head)
     }
   }
 
