@@ -22,19 +22,20 @@ import org.apache.spark.scheduler.local.LocalBackend
 import org.apache.spark.{SparkContext, SparkFunSuite, SparkConf}
 
 
-class ExternalClusterManagerSuite  extends SparkFunSuite
-  with BeforeAndAfter{
+class ExternalClusterManagerSuite extends SparkFunSuite
+with BeforeAndAfter {
 
   val mycm = new ExternalClusterManager {
 
-    def canCreate(masterURL : String): Boolean = masterURL == "myclusterManager"
+    def canCreate(masterURL: String): Boolean = masterURL == "myclusterManager"
 
-    def createTaskScheduler (sc: SparkContext): TaskScheduler =  new TaskSchedulerImpl(sc, 1, isLocal = true)
+    def createTaskScheduler(sc: SparkContext): TaskScheduler = new TaskSchedulerImpl(sc,
+      1, isLocal = true)
 
-    def createSchedulerBackend (sc: SparkContext, scheduler: TaskScheduler): SchedulerBackend=
+    def createSchedulerBackend(sc: SparkContext, scheduler: TaskScheduler): SchedulerBackend =
       new LocalBackend(sc.getConf, scheduler.asInstanceOf[TaskSchedulerImpl], 2)
 
-    def intialize(scheduler: TaskScheduler, backend: SchedulerBackend): Unit=
+    def initialize(scheduler: TaskScheduler, backend: SchedulerBackend): Unit =
       scheduler.asInstanceOf[TaskSchedulerImpl].initialize(backend)
 
   }

@@ -207,6 +207,44 @@ case object SinglePartition extends Partitioning {
 /**
  * Represents a partitioning where rows are split up across partitions based on the hash
  * of `expressions`.  All rows where `expressions` evaluate to the same values are guaranteed to be
+ * in the same partition. Moreover while evaluating expressions if they are given in different order
+ * than this partitioning then also it is considered equal.
+ */
+case class OrderLessHashPartitioning(expressions: Seq[Expression], numPartitions: Int)
+    extends Expression with Partitioning with Unevaluable {
+
+
+  override def children: Seq[Expression] = expressions
+  override def nullable: Boolean = false
+  override def dataType: DataType = IntegerType
+
+  override def satisfies(required: Distribution): Boolean = required match {
+    case UnspecifiedDistribution => true
+    case ClusteredDistribution(requiredClustering) =>
+      expressions.toSet.subsetOf(requiredClustering.toSet)
+    case _ => false
+  }
+
+  private def anyOrderEquals(other: HashPartitioning) : Boolean = {
+    other.numPartitions == this.numPartitions &&
+        (other.expressions.toSet == this.expressions.toSet)
+  }
+
+  override def compatibleWith(other: Partitioning): Boolean = other match {
+    case o: HashPartitioning => anyOrderEquals(o)
+    case _ => false
+  }
+
+  override def guarantees(other: Partitioning): Boolean = other match {
+    case o: HashPartitioning => anyOrderEquals(o)
+    case _ => false
+  }
+
+}
+
+/**
+ * Represents a partitioning where rows are split up across partitions based on the hash
+ * of `expressions`.  All rows where `expressions` evaluate to the same values are guaranteed to be
  * in the same partition.
  */
 case class HashPartitioning(expressions: Seq[Expression], numPartitions: Int)
