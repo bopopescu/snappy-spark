@@ -51,6 +51,9 @@ trait CheckAnalysis {
     plan.foreachUp {
       case p if p.analyzed => // Skip already analyzed sub-plans
 
+      case u: UnresolvedRelation =>
+        u.failAnalysis(s"Table not found: ${u.tableIdentifier}")
+
       case operator: LogicalPlan =>
         operator transformExpressionsUp {
           case u: UnresolvedAlias =>
@@ -118,7 +121,8 @@ trait CheckAnalysis {
                 failAnalysis(
                   s"expression '${e.prettyString}' is neither present in the group by, " +
                     s"nor is it an aggregate function. " +
-                    "Add to group by or wrap in first() if you don't care which value you get.")
+                    "Add to group by or wrap in first() (or first_value) if you don't care " +
+                    "which value you get.")
               case e if groupingExprs.exists(_.semanticEquals(e)) => // OK
               case e if e.references.isEmpty => // OK
               case e => e.children.foreach(checkValidAggregateExpression)

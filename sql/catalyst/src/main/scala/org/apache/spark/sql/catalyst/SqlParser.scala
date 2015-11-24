@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.util.DataTypeParser
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
 
@@ -222,7 +223,10 @@ class SqlParserBase extends AbstractSparkSQLParser with DataTypeParser {
     andExpression * (OR ^^^ { (e1: Expression, e2: Expression) => Or(e1, e2) })
 
   protected lazy val andExpression: Parser[Expression] =
-    comparisonExpression * (AND ^^^ { (e1: Expression, e2: Expression) => And(e1, e2) })
+    notExpression * (AND ^^^ { (e1: Expression, e2: Expression) => And(e1, e2) })
+
+  protected lazy val notExpression: Parser[Expression] =
+    NOT.? ~ comparisonExpression ^^ { case maybeNot ~ e => maybeNot.map(_ => Not(e)).getOrElse(e) }
 
   protected lazy val comparisonExpression: Parser[Expression] =
     ( termExpression ~ ("="  ~> termExpression) ^^ { case e1 ~ e2 => EqualTo(e1, e2) }
@@ -259,7 +263,6 @@ class SqlParserBase extends AbstractSparkSQLParser with DataTypeParser {
     | termExpression ~ ("=" ~> start1) ^^ {
         case e ~ subQuery => InSubquery(e, subQuery, positive = true)
       }
-    | NOT ~> termExpression ^^ {e => Not(e)}
     | termExpression
     )
 
@@ -333,7 +336,7 @@ class SqlParserBase extends AbstractSparkSQLParser with DataTypeParser {
   protected lazy val literal: Parser[Literal] =
     ( numericLiteral
     | booleanLiteral
-    | stringLit ^^ {case s => Literal.create(s, StringType) }
+    | stringLit ^^ { case s => Literal.create(s, StringType) }
     | intervalLiteral
     | NULL ^^^ Literal.create(null, NullType)
     )
@@ -360,13 +363,12 @@ class SqlParserBase extends AbstractSparkSQLParser with DataTypeParser {
   protected lazy val integral: Parser[String] =
     sign.? ~ numericLit ^^ { case s ~ n => s.getOrElse("") + n }
 
-  private def intervalUnit(unitName: String) =
-    acceptIf {
-      case lexical.Identifier(str) =>
-        val normalized = lexical.normalizeKeyword(str)
-        normalized == unitName || normalized == unitName + "s"
-      case _ => false
-    } {_ => "wrong interval unit"}
+  private def intervalUnit(unitName: String) = acceptIf {
+    case lexical.Identifier(str) =>
+      val normalized = lexical.normalizeKeyword(str)
+      normalized == unitName || normalized == unitName + "s"
+    case _ => false
+  } {_ => "wrong interval unit"}
 
   protected lazy val month: Parser[Int] =
     integral <~ intervalUnit("month") ^^ { case num => num.toInt }
@@ -407,21 +409,53 @@ class SqlParserBase extends AbstractSparkSQLParser with DataTypeParser {
       case num => num.toLong * CalendarInterval.MICROS_PER_WEEK
     }
 
+  private def intervalKeyword(keyword: String) = acceptIf {
+    case lexical.Identifier(str) =>
+      lexical.normalizeKeyword(str) == keyword
+    case _ => false
+  } {_ => "wrong interval keyword"}
+
   protected lazy val intervalLiteral: Parser[Literal] =
-    INTERVAL ~> year.? ~ month.? ~ week.? ~ day.? ~ hour.? ~ minute.? ~ second.? ~
-      millisecond.? ~ microsecond.? ^^ {
-        case year ~ month ~ week ~ day ~ hour ~ minute ~ second ~
+    ( INTERVAL ~> stringLit <~ intervalKeyword("year") ~ intervalKeyword("to") ~
+        intervalKeyword("month") ^^ { case s =>
+      Literal(CalendarInterval.fromYearMonthString(s))
+    }
+    | INTERVAL ~> stringLit <~ intervalKeyword("day") ~ intervalKeyword("to") ~
+        intervalKeyword("second") ^^ { case s =>
+      Literal(CalendarInterval.fromDayTimeString(s))
+    }
+    | INTERVAL ~> stringLit <~ intervalKeyword("year") ^^ { case s =>
+      Literal(CalendarInterval.fromSingleUnitString("year", s))
+    }
+    | INTERVAL ~> stringLit <~ intervalKeyword("month") ^^ { case s =>
+      Literal(CalendarInterval.fromSingleUnitString("month", s))
+    }
+    | INTERVAL ~> stringLit <~ intervalKeyword("day") ^^ { case s =>
+      Literal(CalendarInterval.fromSingleUnitString("day", s))
+    }
+    | INTERVAL ~> stringLit <~ intervalKeyword("hour") ^^ { case s =>
+      Literal(CalendarInterval.fromSingleUnitString("hour", s))
+    }
+    | INTERVAL ~> stringLit <~ intervalKeyword("minute") ^^ { case s =>
+      Literal(CalendarInterval.fromSingleUnitString("minute", s))
+    }
+    | INTERVAL ~> stringLit <~ intervalKeyword("second") ^^ { case s =>
+      Literal(CalendarInterval.fromSingleUnitString("second", s))
+    }
+    | INTERVAL ~> year.? ~ month.? ~ week.? ~ day.? ~ hour.? ~ minute.? ~ second.? ~
+        millisecond.? ~ microsecond.? ^^ { case year ~ month ~ week ~ day ~ hour ~ minute ~ second ~
           millisecond ~ microsecond =>
-          if (!Seq(year, month, week, day, hour, minute, second,
-            millisecond, microsecond).exists(_.isDefined)) {
-            throw new AnalysisException(
-              "at least one time unit should be given for interval literal")
-          }
-          val months = Seq(year, month).map(_.getOrElse(0)).sum
-          val microseconds = Seq(week, day, hour, minute, second, millisecond, microsecond)
-            .map(_.getOrElse(0L)).sum
-          Literal.create(new CalendarInterval(months, microseconds), CalendarIntervalType)
+      if (!Seq(year, month, week, day, hour, minute, second,
+        millisecond, microsecond).exists(_.isDefined)) {
+        throw new AnalysisException(
+          "at least one time unit should be given for interval literal")
       }
+      val months = Seq(year, month).map(_.getOrElse(0)).sum
+      val microseconds = Seq(week, day, hour, minute, second, millisecond, microsecond)
+        .map(_.getOrElse(0L)).sum
+      Literal(new CalendarInterval(months, microseconds))
+    }
+    )
 
   private def toNarrowestIntegerType(value: String): Any = {
     val bigIntValue = BigDecimal(value)
