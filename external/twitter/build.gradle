@@ -1,7 +1,7 @@
 description = 'Spark Project External Twitter'
 
 dependencies {
-  compile group: 'org.twitter4j', name: 'twitter4j-stream', version:'3.0.3'
+  compile group: 'org.twitter4j', name: 'twitter4j-stream', version:'4.0.4'
 
   compile project(subprojectBase + 'snappy-spark-streaming_' + scalaBinaryVersion)
 
