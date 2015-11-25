@@ -229,14 +229,14 @@ private[sql] case class EnsureRequirements(sqlContext: SQLContext) extends Rule[
         && requiredChildDistributions.toSet != Set(UnspecifiedDistribution)
         && !Partitioning.allCompatible(children.map(_.outputPartitioning))) {
 
-       // If all the child has same number of partitions then, target partition should
-       // be the partition number of childs rather than the shuffle partition number.
-       val childPartitioningNums = children.map(_.outputPartitioning.numPartitions).distinct
-       val numPartitions = if(childPartitioningNums.size == 1){
-         childPartitioningNums.head
-       } else {
+      // If all the child has same number of partitions then, target partition should
+      // be the partition number of childs rather than the shuffle partition number.
+      val childPartitioningNums = children.map(_.outputPartitioning.numPartitions).distinct
+      val numPartitions = if (childPartitioningNums.size == 1) {
+        childPartitioningNums.head
+      } else {
         defaultNumPartitions
-       }
+      }
 
         children = children.zip(requiredChildDistributions).map { case (child, distribution) =>
         val targetPartitioning = canonicalPartitioning(distribution, numPartitions)
