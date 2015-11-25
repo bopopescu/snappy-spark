@@ -240,7 +240,7 @@ private[sql] case class EnsureRequirements(sqlContext: SQLContext) extends Rule[
         defaultNumPartitions
       }
 
-        children = children.zip(requiredChildDistributions).map { case (child, distribution) =>
+      children = children.zip(requiredChildDistributions).map { case (child, distribution) =>
         val targetPartitioning = canonicalPartitioning(distribution, numPartitions)
         if (child.outputPartitioning.guarantees(targetPartitioning)) {
           child
