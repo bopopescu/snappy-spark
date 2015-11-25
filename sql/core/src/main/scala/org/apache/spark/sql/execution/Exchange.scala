@@ -194,12 +194,13 @@ case class Exchange(newPartitioning: Partitioning, child: SparkPlan) extends Una
  */
 private[sql] case class EnsureRequirements(sqlContext: SQLContext) extends Rule[SparkPlan] {
   // TODO: Determine the number of partitions.
-  private def numPartitions: Int = sqlContext.conf.numShufflePartitions
+  private def defaultNumPartitions: Int = sqlContext.conf.numShufflePartitions
 
   /**
    * Given a required distribution, returns a partitioning that satisfies that distribution.
    */
-  private def canonicalPartitioning(requiredDistribution: Distribution): Partitioning = {
+  private def canonicalPartitioning(requiredDistribution: Distribution,
+      numPartitions : Int = defaultNumPartitions): Partitioning = {
     requiredDistribution match {
       case AllTuples => SinglePartition
       case ClusteredDistribution(clustering) => HashPartitioning(clustering, numPartitions)
@@ -227,8 +228,18 @@ private[sql] case class EnsureRequirements(sqlContext: SQLContext) extends Rule[
     if (children.length > 1
         && requiredChildDistributions.toSet != Set(UnspecifiedDistribution)
         && !Partitioning.allCompatible(children.map(_.outputPartitioning))) {
-      children = children.zip(requiredChildDistributions).map { case (child, distribution) =>
-        val targetPartitioning = canonicalPartitioning(distribution)
+
+      // If all the child has same number of partitions then, target partition should
+      // be the partition number of childs rather than the shuffle partition number.
+      val childPartitioningNums = children.map(_.outputPartitioning.numPartitions).distinct
+      val numPartitions = if (childPartitioningNums.size == 1) {
+        childPartitioningNums.head
+      } else {
+        defaultNumPartitions
+      }
+
+        children = children.zip(requiredChildDistributions).map { case (child, distribution) =>
+        val targetPartitioning = canonicalPartitioning(distribution, numPartitions)
         if (child.outputPartitioning.guarantees(targetPartitioning)) {
           child
         } else {
