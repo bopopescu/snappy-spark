@@ -226,7 +226,7 @@ case object SinglePartition extends Partitioning {
  * in the same partition. Moreover while evaluating expressions if they are given in different order
  * than this partitioning then also it is considered equal.
  */
-case class OrderLessHashPartitioning(expressions: Seq[Expression], numPartitions: Int)
+case class OrderlessHashPartitioning(expressions: Seq[Expression], numPartitions: Int)
     extends Expression with Partitioning with Unevaluable {
 
 
@@ -236,18 +236,23 @@ case class OrderLessHashPartitioning(expressions: Seq[Expression], numPartitions
 
   override def satisfies(required: Distribution): Boolean = required match {
     case UnspecifiedDistribution => true
-    case ClusteredDistribution(requiredClustering) =>
-      expressions.toSet.subsetOf(requiredClustering.toSet)
+    case ClusteredDistribution(requiredClustering) => {
+      (expressions.forall(e => {
+        requiredClustering.find(a => a.semanticEquals(e)).isDefined
+      }))
+    }
     case _ => false
   }
 
   private def anyOrderEquals(other: HashPartitioning) : Boolean = {
     other.numPartitions == this.numPartitions &&
-        (other.expressions.toSet == this.expressions.toSet)
+        (other.expressions.forall(e => {
+          expressions.find(a => a.semanticEquals(e)).isDefined
+        }))
   }
 
   override def compatibleWith(other: Partitioning): Boolean = other match {
-    case o: HashPartitioning => anyOrderEquals(o)
+    case p: HashPartitioning => anyOrderEquals(p)
     case _ => false
   }
 
