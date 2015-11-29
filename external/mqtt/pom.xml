@@ -20,13 +20,13 @@
   <modelVersion>4.0.0</modelVersion>
   <parent>
     <groupId>org.apache.spark</groupId>
-    <artifactId>snappy-spark-parent_2.10</artifactId>
-    <version>1.5.1-SNAPSHOT.1</version>
+    <artifactId>spark-parent_2.10</artifactId>
+    <version>1.5.1-SNAPSHOT</version>
     <relativePath>../../pom.xml</relativePath>
   </parent>
 
   <groupId>org.apache.spark</groupId>
-  <artifactId>snappy-spark-streaming-mqtt_2.10</artifactId>
+  <artifactId>spark-streaming-mqtt_2.10</artifactId>
   <properties>
     <sbt.project.name>streaming-mqtt</sbt.project.name>
   </properties>
@@ -37,13 +37,13 @@
   <dependencies>
     <dependency>
       <groupId>org.apache.spark</groupId>
-      <artifactId>snappy-spark-streaming_${scala.binary.version}</artifactId>
+      <artifactId>spark-streaming_${scala.binary.version}</artifactId>
       <version>${project.version}</version>
       <scope>provided</scope>
     </dependency>
     <dependency>
       <groupId>org.apache.spark</groupId>
-      <artifactId>snappy-spark-core_${scala.binary.version}</artifactId>
+      <artifactId>spark-core_${scala.binary.version}</artifactId>
       <version>${project.version}</version>
       <type>test-jar</type>
       <scope>test</scope>
@@ -93,7 +93,7 @@
             </goals>
             <configuration>
               <!-- Make sure the file path is same as the sbt build -->
-              <finalName>snappy-spark-streaming-mqtt-test-${project.version}</finalName>
+              <finalName>spark-streaming-mqtt-test-${project.version}</finalName>
               <outputDirectory>${project.build.directory}/scala-${scala.binary.version}/</outputDirectory>
               <appendAssemblyId>false</appendAssemblyId>
               <!-- Don't publish it since it's only for Python tests -->

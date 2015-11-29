@@ -71,8 +71,8 @@ object SparkBuild extends PomBuild {
     var profiles: mutable.Seq[String] = mutable.Seq("sbt")
     // scalastyle:off println
     if (Properties.envOrNone("SPARK_GANGLIA_LGPL").isDefined) {
-      println("NOTE: SPARK_GANGLIA_LGPL is deprecated, please use -Psnappy-spark-ganglia-lgpl flag.")
-      profiles ++= Seq("snappy-spark-ganglia-lgpl")
+      println("NOTE: SPARK_GANGLIA_LGPL is deprecated, please use -Pspark-ganglia-lgpl flag.")
+      profiles ++= Seq("spark-ganglia-lgpl")
     }
     if (Properties.envOrNone("SPARK_HIVE").isDefined) {
       println("NOTE: SPARK_HIVE is deprecated, please use -Phive and -Phive-thriftserver flags.")
