@@ -233,12 +233,7 @@ object JdbcUtils extends Logging {
 
     val rddSchema = df.schema
     val driver: String = DriverRegistry.getDriverClassName(url)
-    val getConnection: () => Connection = { () => {
-      val con = JDBCRDD.getConnector(driver, url, properties)()
-      con.setTransactionIsolation(Connection.TRANSACTION_NONE)
-      con
-    }
-    }
+    val getConnection = JDBCRDD.getConnector(driver, url, properties)
     val batchSize = properties.getProperty("batchsize", "1000").toInt
     df.foreachPartition { iterator =>
       savePartition(getConnection, table, iterator, rddSchema, nullTypes, batchSize)
