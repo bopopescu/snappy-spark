@@ -2211,7 +2211,7 @@ object SparkContext extends Logging {
    *
    * Access to this field is guarded by SPARK_CONTEXT_CONSTRUCTOR_LOCK.
    */
-  private val activeContext: AtomicReference[SparkContext] =
+  private[spark] val activeContext: AtomicReference[SparkContext] =
     new AtomicReference[SparkContext](null)
 
   /**
@@ -2734,7 +2734,7 @@ object SparkContext extends Logging {
         try {
           val scheduler = cm.createTaskScheduler(sc)
           val backend = cm.createSchedulerBackend(sc, scheduler)
-          cm.intialize(scheduler, backend)
+          cm.initialize(scheduler, backend)
           (backend, scheduler)
         } catch {
           case e: Exception => {

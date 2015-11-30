@@ -167,7 +167,7 @@ object ResolvedDataSource extends Logging {
     val clazz: Class[_] = lookupDataSource(provider)
     val relation = clazz.newInstance() match {
       case dataSource: CreatableRelationProvider =>
-        dataSource.createRelation(sqlContext, mode, options, data)
+        dataSource.createRelation(sqlContext, mode, new CaseInsensitiveMap(options), data)
       case dataSource: HadoopFsRelationProvider =>
         // Don't glob path for the write path.  The contracts here are:
         //  1. Only one output path can be specified on the write path;

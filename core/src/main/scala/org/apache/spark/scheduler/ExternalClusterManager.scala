@@ -55,5 +55,5 @@ trait ExternalClusterManager {
    * @param scheduler TaskScheduler that will be responsible for task handling
    * @param backend SchedulerBackend that works with a TaskScheduler
    */
-  def intialize(scheduler: TaskScheduler, backend: SchedulerBackend): Unit
+  def initialize(scheduler: TaskScheduler, backend: SchedulerBackend): Unit
 }
