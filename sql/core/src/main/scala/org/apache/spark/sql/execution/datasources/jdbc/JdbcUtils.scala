@@ -105,8 +105,6 @@ object JdbcUtils extends Logging {
     val conn = getConnection()
     var committed = false
     try {
-      conn.setTransactionIsolation(Connection.TRANSACTION_NONE)
-      conn.setAutoCommit(false) // Everything in the same db transaction.
       val stmt = insertStatement(conn, table, rddSchema)
       try {
         var rowCount = 0
