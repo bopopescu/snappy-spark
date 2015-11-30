@@ -369,8 +369,10 @@ private[spark] class TaskSetManager(
 
   private def canRunOnExecutor(execId: String, taskId: Int): Boolean = {
     val locations = tasks(taskId).preferredLocations
-    locations.isEmpty || locations.collectFirst {
-      case e: ExecutorCacheTaskLocation if execId == e.executorId => true
+    locations.isEmpty || locations.exists {
+      case e: ExecutorCacheTaskLocation => execId == e.executorId
+      case _ => false
+    } || locations.collectFirst {
       case e: ExecutorCacheTaskLocation if sched.isExecutorAlive(e.executorId)
           && !executorIsBlacklisted(e.executorId, taskId) => false
     }.getOrElse(true)
