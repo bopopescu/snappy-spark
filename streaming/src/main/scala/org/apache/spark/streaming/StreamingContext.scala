@@ -152,7 +152,7 @@ class StreamingContext private[streaming] (
 
   private[streaming] val env = sc.env
 
-  private[streaming] val graph: DStreamGraph = {
+  /*private[streaming]*/ val graph: DStreamGraph = {
     if (isCheckpointPresent) {
       cp_.graph.setContext(this)
       cp_.graph.restoreCheckpointData()

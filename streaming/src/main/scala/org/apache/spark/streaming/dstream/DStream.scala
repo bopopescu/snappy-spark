@@ -34,6 +34,7 @@ import org.apache.spark.streaming.scheduler.Job
 import org.apache.spark.streaming.ui.UIUtils
 import org.apache.spark.util.{CallSite, MetadataCleaner, Utils}
 
+
 /**
  * A Discretized Stream (DStream), the basic abstraction in Spark Streaming, is a continuous
  * sequence of RDDs (of the same type) representing a continuous stream of data (see
@@ -99,9 +100,9 @@ abstract class DStream[T: ClassTag] (
   private[streaming] val checkpointData = new DStreamCheckpointData(this)
 
   // Reference to whole DStream graph
-  private[streaming] var graph: DStreamGraph = null
+  /*private[streaming]*/var graph: DStreamGraph = null
 
-  private[streaming] def isInitialized = (zeroTime != null)
+  /*private[streaming]*/ def isInitialized = (zeroTime != null)
 
   // Duration for which the DStream requires its parent DStream to remember each RDD created
   private[streaming] def parentRememberDuration = rememberDuration
@@ -212,14 +213,42 @@ abstract class DStream[T: ClassTag] (
     dependencies.foreach(_.initialize(zeroTime))
   }
 
+  /**
+   * Same as initialize method but not initializing dependencies
+   * @param time
+   */
+  def initializeAfterContextStart(time: Time) {
+    if (zeroTime != null && zeroTime != time) {
+      throw new SparkException("ZeroTime is already initialized to " + zeroTime
+        + ", cannot initialize it again to " + time)
+    }
+    zeroTime = time
+
+    // Set the checkpoint interval to be slideDuration or 10 seconds, which ever is larger
+    if (mustCheckpoint && checkpointDuration == null) {
+      checkpointDuration = slideDuration * math.ceil(Seconds(10) / slideDuration).toInt
+      logInfo("Checkpoint interval automatically set to " + checkpointDuration)
+    }
+
+    // Set the minimum value of the rememberDuration if not already set
+    var minRememberDuration = slideDuration
+    if (checkpointDuration != null && minRememberDuration <= checkpointDuration) {
+      // times 2 just to be sure that the latest checkpoint is not forgotten (#paranoia)
+      minRememberDuration = checkpointDuration * 2
+    }
+    if (rememberDuration == null || rememberDuration < minRememberDuration) {
+      rememberDuration = minRememberDuration
+    }
+  }
+
   private def validateAtInit(): Unit = {
     ssc.getState() match {
       case StreamingContextState.INITIALIZED =>
         // good to go
       case StreamingContextState.ACTIVE =>
-        throw new IllegalStateException(
+/*        throw new IllegalStateException(
           "Adding new inputs, transformations, and output operations after " +
-            "starting a context is not supported")
+            "starting a context is not supported")*/
       case StreamingContextState.STOPPED =>
         throw new IllegalStateException(
           "Adding new inputs, transformations, and output operations after " +
@@ -451,6 +480,7 @@ abstract class DStream[T: ClassTag] (
     }
     logDebug("Cleared " + oldRDDs.size + " RDDs that were older than " +
       (time - rememberDuration) + ": " + oldRDDs.keys.mkString(", "))
+
     dependencies.foreach(_.clearMetadata(time))
   }
 
@@ -865,7 +895,6 @@ abstract class DStream[T: ClassTag] (
     if (!isInitialized) {
       throw new SparkException(this + " has not been initialized")
     }
-
     val alignedToTime = if ((toTime - zeroTime).isMultipleOf(slideDuration)) {
       toTime
     } else {

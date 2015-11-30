@@ -87,7 +87,8 @@ class TwitterReceiver(
 
       val query = new FilterQuery
       if (filters.size > 0) {
-        query.track(filters.toArray)
+        //Yogesh: commented because twitter4j-stream4.0.0 in build.gradle
+        //query.track(filters.toArray)
         newTwitterStream.filter(query)
       } else {
         newTwitterStream.sample()
