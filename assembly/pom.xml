@@ -20,13 +20,13 @@
   <modelVersion>4.0.0</modelVersion>
   <parent>
     <groupId>org.apache.spark</groupId>
-    <artifactId>snappy-spark-parent_2.10</artifactId>
-    <version>1.5.1-SNAPSHOT.1</version>
+    <artifactId>spark-parent_2.10</artifactId>
+    <version>1.5.1-SNAPSHOT</version>
     <relativePath>../pom.xml</relativePath>
   </parent>
 
   <groupId>org.apache.spark</groupId>
-  <artifactId>snappy-spark-assembly_2.10</artifactId>
+  <artifactId>spark-assembly_2.10</artifactId>
   <name>Spark Project Assembly</name>
   <url>http://spark.apache.org/</url>
   <packaging>pom</packaging>
@@ -34,44 +34,44 @@
   <properties>
     <sbt.project.name>assembly</sbt.project.name>
     <spark.jar.dir>scala-${scala.binary.version}</spark.jar.dir>
-    <spark.jar.basename>snappy-spark-assembly-${project.version}-hadoop${hadoop.version}.jar</spark.jar.basename>
+    <spark.jar.basename>spark-assembly-${project.version}-hadoop${hadoop.version}.jar</spark.jar.basename>
     <spark.jar>${project.build.directory}/${spark.jar.dir}/${spark.jar.basename}</spark.jar>
   </properties>
 
   <dependencies>
     <dependency>
       <groupId>org.apache.spark</groupId>
-      <artifactId>snappy-spark-core_${scala.binary.version}</artifactId>
+      <artifactId>spark-core_${scala.binary.version}</artifactId>
       <version>${project.version}</version>
     </dependency>
     <dependency>
       <groupId>org.apache.spark</groupId>
-      <artifactId>snappy-spark-bagel_${scala.binary.version}</artifactId>
+      <artifactId>spark-bagel_${scala.binary.version}</artifactId>
       <version>${project.version}</version>
     </dependency>
     <dependency>
       <groupId>org.apache.spark</groupId>
-      <artifactId>snappy-spark-mllib_${scala.binary.version}</artifactId>
+      <artifactId>spark-mllib_${scala.binary.version}</artifactId>
       <version>${project.version}</version>
     </dependency>
     <dependency>
       <groupId>org.apache.spark</groupId>
-      <artifactId>snappy-spark-streaming_${scala.binary.version}</artifactId>
+      <artifactId>spark-streaming_${scala.binary.version}</artifactId>
       <version>${project.version}</version>
     </dependency>
     <dependency>
       <groupId>org.apache.spark</groupId>
-      <artifactId>snappy-spark-graphx_${scala.binary.version}</artifactId>
+      <artifactId>spark-graphx_${scala.binary.version}</artifactId>
       <version>${project.version}</version>
     </dependency>
     <dependency>
       <groupId>org.apache.spark</groupId>
-      <artifactId>snappy-spark-sql_${scala.binary.version}</artifactId>
+      <artifactId>spark-sql_${scala.binary.version}</artifactId>
       <version>${project.version}</version>
     </dependency>
     <dependency>
       <groupId>org.apache.spark</groupId>
-      <artifactId>snappy-spark-repl_${scala.binary.version}</artifactId>
+      <artifactId>spark-repl_${scala.binary.version}</artifactId>
       <version>${project.version}</version>
     </dependency>
   </dependencies>
@@ -171,7 +171,7 @@
       <dependencies>
         <dependency>
           <groupId>org.apache.spark</groupId>
-          <artifactId>snappy-spark-yarn_${scala.binary.version}</artifactId>
+          <artifactId>spark-yarn_${scala.binary.version}</artifactId>
           <version>${project.version}</version>
         </dependency>
       </dependencies>
@@ -181,7 +181,7 @@
       <dependencies>
         <dependency>
           <groupId>org.apache.spark</groupId>
-          <artifactId>snappy-spark-hive_${scala.binary.version}</artifactId>
+          <artifactId>spark-hive_${scala.binary.version}</artifactId>
           <version>${project.version}</version>
         </dependency>
       </dependencies>
@@ -191,17 +191,17 @@
       <dependencies>
         <dependency>
           <groupId>org.apache.spark</groupId>
-          <artifactId>snappy-spark-hive-thriftserver_${scala.binary.version}</artifactId>
+          <artifactId>spark-hive-thriftserver_${scala.binary.version}</artifactId>
           <version>${project.version}</version>
         </dependency>
       </dependencies>
     </profile>
     <profile>
-      <id>snappy-spark-ganglia-lgpl</id>
+      <id>spark-ganglia-lgpl</id>
       <dependencies>
         <dependency>
           <groupId>org.apache.spark</groupId>
-          <artifactId>snappy-spark-ganglia-lgpl_${scala.binary.version}</artifactId>
+          <artifactId>spark-ganglia-lgpl_${scala.binary.version}</artifactId>
           <version>${project.version}</version>
         </dependency>
       </dependencies>

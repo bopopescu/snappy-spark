@@ -25,8 +25,8 @@
     <version>14</version>
   </parent>
   <groupId>org.apache.spark</groupId>
-  <artifactId>snappy-spark-parent_2.10</artifactId>
-  <version>1.5.1-SNAPSHOT.1</version>
+  <artifactId>spark-parent_2.10</artifactId>
+  <version>1.5.1-SNAPSHOT</version>
   <packaging>pom</packaging>
   <name>Spark Project Parent POM</name>
   <url>http://spark.apache.org/</url>
@@ -2293,7 +2293,7 @@
 
     <!-- Ganglia integration is not included by default due to LGPL-licensed code -->
     <profile>
-      <id>snappy-spark-ganglia-lgpl</id>
+      <id>spark-ganglia-lgpl</id>
       <modules>
         <module>extras/spark-ganglia-lgpl</module>
       </modules>
