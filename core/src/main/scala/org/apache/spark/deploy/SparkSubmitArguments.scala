@@ -128,7 +128,7 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
    */
   private def ignoreNonSparkProperties(): Unit = {
     sparkProperties.foreach { case (k, v) =>
-      if (!k.startsWith("spark.") &&  !k.startsWith("snappydata.") ) {
+      if (!k.startsWith("spark.") && !k.startsWith("snappydata.")) {
         sparkProperties -= k
         SparkSubmit.printWarning(s"Ignoring non-spark config property: $k=$v")
       }
