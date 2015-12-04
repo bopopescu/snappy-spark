@@ -82,6 +82,14 @@ abstract class JdbcDialect {
   def getJDBCType(dt: DataType): Option[JdbcType] = None
 
   /**
+   * Retrieve the jdbc / sql type for a given datatype.
+   * @param dt The datatype (e.g. [[org.apache.spark.sql.types.StringType]])
+   * @param md The metadata
+   * @return The new JdbcType if there is an override for this DataType
+   */
+  def getJDBCType(dt: DataType, md: Metadata): Option[JdbcType] = None
+
+  /**
    * Quotes the identifier. This is used to put quotes around the identifier in case the column
    * name is a reserved keyword, or in case it contains characters that require quotes (e.g. space).
    */
