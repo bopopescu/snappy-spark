@@ -87,7 +87,7 @@ abstract class JdbcDialect {
    * @param md The metadata
    * @return The new JdbcType if there is an override for this DataType
    */
-  def getJDBCType(dt: DataType, md: Metadata): Option[JdbcType] = None
+  def getJDBCType(dt: DataType, md: Metadata): Option[JdbcType] = getJDBCType(dt)
 
   /**
    * Quotes the identifier. This is used to put quotes around the identifier in case the column
