@@ -173,6 +173,7 @@ private[hive] class ClientWrapper(
       SessionState.start(state)
       state.out = new PrintStream(outputBuffer, true, "UTF-8")
       state.err = new PrintStream(outputBuffer, true, "UTF-8")
+      conf= state.getConf
       state
     } finally {
       Thread.currentThread().setContextClassLoader(original)
@@ -181,7 +182,8 @@ private[hive] class ClientWrapper(
   }
 
   /** Returns the configuration for the current session. */
-  def conf: HiveConf = SessionState.get().getConf
+  //def conf: HiveConf = SessionState.get().getConf
+  var conf: HiveConf = _
 
   override def getConf(key: String, defaultValue: String): String = {
     conf.get(key, defaultValue)
