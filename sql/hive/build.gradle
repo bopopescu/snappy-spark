@@ -85,4 +85,4 @@ dependencies {
   testCompile project(path: subprojectBase + 'snappy-spark-catalyst_' + scalaBinaryVersion, configuration: 'testOutput')
 }
 
-sourceSets.test.scala.srcDirs = ["src/test/scala", "compatibility/src/test/scala"]
+sourceSets.test.scala.srcDir 'compatibility/src/test/scala'

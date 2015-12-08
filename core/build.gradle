@@ -119,5 +119,5 @@ dependencies {
 // TODO: sparkr profile, copy-dependencies target?
 
 // fix scala+java test ordering
-sourceSets.test.scala.srcDir 'src/test/java'
+sourceSets.test.scala.srcDir "src/test/java"
 sourceSets.test.java.srcDirs = []
