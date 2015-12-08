@@ -27,7 +27,7 @@ import scala.tools.nsc.interpreter.session._
 import scala.util.Properties.{jdkHome, javaVersion}
 import scala.tools.util.{Javap}
 import scala.annotation.tailrec
-import scala.collection.mutable.ListBuffer
+import scala.collection.mutable.{ArrayBuffer, ListBuffer}
 import scala.concurrent.ops
 import scala.tools.nsc.util._
 import scala.tools.nsc.interpreter._
@@ -1021,18 +1021,29 @@ class SparkILoop(
 
   @DeveloperApi
   def createSQLContext(): SQLContext = {
-    val name = "org.apache.spark.sql.hive.HiveContext"
+    val contexts = ArrayBuffer("org.apache.spark.sql.SnappyContext", "org.apache.spark.sql.hive.HiveContext")
     val loader = Utils.getContextOrSparkClassLoader
+    var sqlContext = createSQLContext(loader, contexts)
+    if (sqlContext == null) {
+      sqlContext = new SQLContext(sparkContext)
+      logInfo("Created sql context..")
+    }
+    sqlContext
+  }
+
+  def createSQLContext(loader: ClassLoader, sqlContexts: ArrayBuffer[String]): SQLContext = {
+    var sqlContext: SQLContext = null
+    val sqlContextClassName = sqlContexts(0)
     try {
-      sqlContext = loader.loadClass(name).getConstructor(classOf[SparkContext])
-        .newInstance(sparkContext).asInstanceOf[SQLContext] 
-      logInfo("Created sql context (with Hive support)..")
-    }
-    catch {
+      sqlContext = loader.loadClass(sqlContextClassName).getConstructor(classOf[SparkContext])
+        .newInstance(sparkContext).asInstanceOf[SQLContext]
+      logInfo("Created sql context.." + sqlContextClassName)
+    } catch {
       case _: java.lang.ClassNotFoundException | _: java.lang.NoClassDefFoundError =>
-        sqlContext = new SQLContext(sparkContext)
-        logInfo("Created sql context..")
+        if (sqlContexts.length >= 1)
+          sqlContext = createSQLContext(loader, sqlContexts.-(sqlContextClassName))
     }
+
     sqlContext
   }
 
