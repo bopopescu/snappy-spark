@@ -61,8 +61,6 @@ object JdbcUtils extends Logging {
   /**
    * Returns a PreparedStatement that inserts a row into table via conn.
    */
-  //TODO: Suranjan prepared statement without col name gives error in case
-  // table has generated columns. gemfirexd bug?
   def insertStatement(conn: Connection, table: String, rddSchema: StructType): PreparedStatement = {
     val sql = new StringBuilder(s"INSERT INTO $table (")
     var fieldsLeft = rddSchema.fields.length
