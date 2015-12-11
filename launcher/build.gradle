@@ -1,6 +1,8 @@
 description = 'Spark Project Launcher'
 
 dependencies {
+  compile project(subprojectBase + 'snappy-spark-test-tags_' + scalaBinaryVersion)
+
   testCompile(group: 'org.apache.hadoop', name: 'hadoop-client', version: hadoopVersion) {
     exclude(group: 'asm', module: 'asm')
     exclude(group: 'org.codehaus.jackson', module: 'jackson-mapper-asl')
@@ -12,4 +14,5 @@ dependencies {
     exclude(group: 'javax.servlet', module: 'servlet-api')
     exclude(group: 'junit', module: 'junit')
   }
+  testCompile group: 'org.slf4j', name: 'jul-to-slf4j', version: slf4jVersion
 }

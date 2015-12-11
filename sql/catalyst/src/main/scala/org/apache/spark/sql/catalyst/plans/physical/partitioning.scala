@@ -194,6 +194,22 @@ case class UnknownPartitioning(numPartitions: Int) extends Partitioning {
   override def guarantees(other: Partitioning): Boolean = false
 }
 
+/**
+ * Represents a partitioning where rows are distributed evenly across output partitions
+ * by starting from a random target partition number and distributing rows in a round-robin
+ * fashion. This partitioning is used when implementing the DataFrame.repartition() operator.
+ */
+case class RoundRobinPartitioning(numPartitions: Int) extends Partitioning {
+  override def satisfies(required: Distribution): Boolean = required match {
+    case UnspecifiedDistribution => true
+    case _ => false
+  }
+
+  override def compatibleWith(other: Partitioning): Boolean = false
+
+  override def guarantees(other: Partitioning): Boolean = false
+}
+
 case object SinglePartition extends Partitioning {
   val numPartitions = 1
 
@@ -218,21 +234,22 @@ case class OrderlessHashPartitioning(expressions: Seq[Expression], numPartitions
   override def nullable: Boolean = false
   override def dataType: DataType = IntegerType
 
+  private def matchExpressions(otherExpression: Seq[Expression]): Boolean = {
+    expressions.length == otherExpression.length && expressions.forall(a =>
+      otherExpression.exists(e => e.semanticEquals(a)))
+  }
+
   override def satisfies(required: Distribution): Boolean = required match {
     case UnspecifiedDistribution => true
     case ClusteredDistribution(requiredClustering) => {
-      (expressions.forall(e => {
-        requiredClustering.find(a => a.semanticEquals(e)).isDefined
-      }))
+      matchExpressions(requiredClustering)
     }
     case _ => false
   }
 
   private def anyOrderEquals(other: HashPartitioning) : Boolean = {
     other.numPartitions == this.numPartitions &&
-        (other.expressions.forall(e => {
-          expressions.find(a => a.semanticEquals(e)).isDefined
-        }))
+        matchExpressions(other.expressions)
   }
 
   override def compatibleWith(other: Partitioning): Boolean = other match {

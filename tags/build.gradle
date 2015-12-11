@@ -1,0 +1,5 @@
+description = 'Spark Project Test Tags'
+
+dependencies {
+  compile "org.scalatest:scalatest_${scalaBinaryVersion}:2.2.1"
+}

@@ -31,6 +31,49 @@ dependencies {
     exclude(module: 'servlet-api')
     exclude(module: 'commons-logging')
   }
+  compile(group: 'org.spark-project.hive', name: 'hive-exec', version:'1.2.1.spark') {
+    exclude(module: 'hive-metastore')
+    exclude(module: 'hive-shims')
+    exclude(module: 'hive-ant')
+    exclude(module: 'spark-client')
+    exclude(module: 'ant')
+    exclude(module: 'ant')
+    exclude(module: 'kryo')
+    exclude(module: 'commons-codec')
+    exclude(module: 'commons-httpclient')
+    exclude(module: 'avro-mapred')
+    exclude(module: 'calcite-core')
+    exclude(module: 'apache-curator')
+    exclude(module: 'curator-client')
+    exclude(module: 'curator-framework')
+    exclude(module: 'libthrift')
+    exclude(module: 'libfb303')
+    exclude(module: 'zookeeper')
+    exclude(module: 'slf4j-api')
+    exclude(module: 'slf4j-log4j12')
+    exclude(module: 'log4j')
+    exclude(module: 'commons-logging')
+  }
+  compile(group: 'org.spark-project.hive', name: 'hive-metastore', version:'1.2.1.spark') {
+    exclude(module: 'hive-serde')
+    exclude(module: 'hive-shims')
+    exclude(module: 'libfb303')
+    exclude(module: 'libthrift')
+    exclude(module: 'servlet-api')
+    exclude(module: 'guava')
+    exclude(module: 'slf4j-api')
+    exclude(module: 'slf4j-log4j12')
+  }
+  compile(group: 'org.apache.thrift', name: 'libthrift', version:'0.9.2') {
+    exclude(module: 'httpclient')
+    exclude(module: 'httpcore')
+    exclude(module: 'slf4j-api')
+  }
+  compile(group: 'org.apache.thrift', name: 'libfb303', version:'0.9.2') {
+    exclude(module: 'httpclient')
+    exclude(module: 'httpcore')
+    exclude(module: 'slf4j-api')
+  }
 
   testCompile project(subprojectBase + 'snappy-spark-network-yarn_' + scalaBinaryVersion)
   testCompile project(path: subprojectBase + 'snappy-spark-core_' + scalaBinaryVersion, configuration: 'testOutput')

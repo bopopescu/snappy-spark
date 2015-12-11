@@ -19,6 +19,8 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
+import org.apache.spark.sql.catalyst.plans.{LeftSemiJoin, LeftSemi, LeftAnti}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.types._
 
@@ -49,8 +51,17 @@ trait CheckAnalysis {
     plan.foreachUp {
       case p if p.analyzed => // Skip already analyzed sub-plans
 
+      case u: UnresolvedRelation =>
+        u.failAnalysis(s"Table not found: ${u.tableIdentifier}")
+
       case operator: LogicalPlan =>
         operator transformExpressionsUp {
+          case u: UnresolvedAlias =>
+            failAnalysis(s"Couldn't resolve the UnresolvedAlias ${u.prettyString}")
+
+          case s: SubQueryExpression =>
+            failAnalysis(s"Couldn't resolve the subquery expression ${s.prettyString}")
+
           case a: Attribute if !a.resolved =>
             val from = operator.inputSet.map(_.name).mkString(", ")
             a.failAnalysis(s"cannot resolve '${a.prettyString}' given input columns $from")
@@ -110,7 +121,8 @@ trait CheckAnalysis {
                 failAnalysis(
                   s"expression '${e.prettyString}' is neither present in the group by, " +
                     s"nor is it an aggregate function. " +
-                    "Add to group by or wrap in first() if you don't care which value you get.")
+                    "Add to group by or wrap in first() (or first_value) if you don't care " +
+                    "which value you get.")
               case e if groupingExprs.exists(_.semanticEquals(e)) => // OK
               case e if e.references.isEmpty => // OK
               case e => e.children.foreach(checkValidAggregateExpression)

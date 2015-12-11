@@ -25,29 +25,28 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
-import org.apache.hadoop.hive.serde.serdeConstants
-import org.apache.hadoop.hive.ql.{ErrorMsg, Context}
-import org.apache.hadoop.hive.ql.exec.{FunctionRegistry, FunctionInfo}
+import org.apache.hadoop.hive.ql.exec.{FunctionInfo, FunctionRegistry}
 import org.apache.hadoop.hive.ql.lib.Node
 import org.apache.hadoop.hive.ql.parse._
 import org.apache.hadoop.hive.ql.plan.PlanUtils
 import org.apache.hadoop.hive.ql.session.SessionState
+import org.apache.hadoop.hive.ql.{Context, ErrorMsg}
+import org.apache.hadoop.hive.serde.serdeConstants
 import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
 
 import org.apache.spark.Logging
-import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst
+import org.apache.spark.sql.{AnalysisException, catalyst}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans._
-import org.apache.spark.sql.catalyst.plans.logical
+import org.apache.spark.sql.catalyst.plans.{logical, _}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin
+import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.execution.ExplainCommand
 import org.apache.spark.sql.execution.datasources.DescribeCommand
 import org.apache.spark.sql.hive.HiveShim._
 import org.apache.spark.sql.hive.client._
-import org.apache.spark.sql.hive.execution.{HiveNativeCommand, DropTable, AnalyzeTable, HiveScriptIOSchema}
+import org.apache.spark.sql.hive.execution.{AnalyzeTable, DropTable, HiveNativeCommand, HiveScriptIOSchema}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
 import org.apache.spark.util.random.RandomSampler
@@ -77,6 +76,16 @@ private[hive] case class CreateTableAsSelect(
     childrenResolved
 }
 
+private[hive] case class CreateViewAsSelect(
+    tableDesc: HiveTable,
+    child: LogicalPlan,
+    allowExisting: Boolean,
+    replace: Boolean,
+    sql: String) extends UnaryNode with Command {
+  override def output: Seq[Attribute] = Seq.empty[Attribute]
+  override lazy val resolved: Boolean = false
+}
+
 /** Provides a mapping from HiveQL statements to catalyst logical plans and expression trees. */
 private[hive] object HiveQl extends Logging {
   protected val nativeCommands = Seq(
@@ -99,7 +108,6 @@ private[hive] object HiveQl extends Logging {
     "TOK_ALTERTABLE_SKEWED",
     "TOK_ALTERTABLE_TOUCH",
     "TOK_ALTERTABLE_UNARCHIVE",
-    "TOK_ALTERVIEW",
     "TOK_ALTERVIEW_ADDPARTS",
     "TOK_ALTERVIEW_AS",
     "TOK_ALTERVIEW_DROPPARTS",
@@ -109,8 +117,8 @@ private[hive] object HiveQl extends Logging {
     "TOK_CREATEDATABASE",
     "TOK_CREATEFUNCTION",
     "TOK_CREATEINDEX",
+    "TOK_CREATEMACRO",
     "TOK_CREATEROLE",
-    "TOK_CREATEVIEW",
 
     "TOK_DESCDATABASE",
     "TOK_DESCFUNCTION",
@@ -118,6 +126,7 @@ private[hive] object HiveQl extends Logging {
     "TOK_DROPDATABASE",
     "TOK_DROPFUNCTION",
     "TOK_DROPINDEX",
+    "TOK_DROPMACRO",
     "TOK_DROPROLE",
     "TOK_DROPTABLE_PROPERTIES",
     "TOK_DROPVIEW",
@@ -254,22 +263,31 @@ private[hive] object HiveQl extends Logging {
      * Otherwise, there will be Null pointer exception,
      * when retrieving properties form HiveConf.
      */
-    val hContext = new Context(SessionState.get().getConf())
-    val node = ParseUtils.findRootNonNullToken((new ParseDriver).parse(sql, hContext))
+    val hContext = createContext()
+    val node = getAst(sql, hContext)
     hContext.clear()
     node
   }
+
+  private def createContext(): Context = new Context(hiveConf)
+
+  private def getAst(sql: String, context: Context) =
+    ParseUtils.findRootNonNullToken((new ParseDriver).parse(sql, context))
 
   /**
    * Returns the HiveConf
    */
   private[this] def hiveConf: HiveConf = {
-    val ss = SessionState.get() // SessionState is lazy initialization, it can be null here
+    var ss = SessionState.get()
+    // SessionState is lazy initialization, it can be null here
     if (ss == null) {
-      new HiveConf()
-    } else {
-      ss.getConf
+      val original = Thread.currentThread().getContextClassLoader
+      val conf = new HiveConf(classOf[SessionState])
+      conf.setClassLoader(original)
+      ss = new SessionState(conf)
+      SessionState.start(ss)
     }
+    ss.getConf
   }
 
   /** Returns a LogicalPlan for a given HiveQL string. */
@@ -280,15 +298,18 @@ private[hive] object HiveQl extends Logging {
   /** Creates LogicalPlan for a given HiveQL string. */
   def createPlan(sql: String): LogicalPlan = {
     try {
-      val tree = getAst(sql)
-      if (nativeCommands contains tree.getText) {
+      val context = createContext()
+      val tree = getAst(sql, context)
+      val plan = if (nativeCommands contains tree.getText) {
         HiveNativeCommand(sql)
       } else {
-        nodeToPlan(tree) match {
+        nodeToPlan(tree, context) match {
           case NativePlaceholder => HiveNativeCommand(sql)
           case other => other
         }
       }
+      context.clear()
+      plan
     } catch {
       case pe: org.apache.hadoop.hive.ql.parse.ParseException =>
         pe.getMessage match {
@@ -342,7 +363,9 @@ private[hive] object HiveQl extends Logging {
     }
   }
 
-  protected def getClauses(clauseNames: Seq[String], nodeList: Seq[ASTNode]): Seq[Option[Node]] = {
+  protected def getClauses(
+      clauseNames: Seq[String],
+      nodeList: Seq[ASTNode]): Seq[Option[ASTNode]] = {
     var remainingNodes = nodeList
     val clauses = clauseNames.map { clauseName =>
       val (matches, nonMatches) = remainingNodes.partition(_.getText.toUpperCase == clauseName)
@@ -422,24 +445,12 @@ private[hive] object HiveQl extends Logging {
       throw new NotImplementedError(s"No parse rules for StructField:\n ${dumpTree(a).toString} ")
   }
 
-  protected def extractDbNameTableName(tableNameParts: Node): (Option[String], String) = {
-    val (db, tableName) =
-      tableNameParts.getChildren.asScala.map {
-        case Token(part, Nil) => cleanIdentifier(part)
-      } match {
-        case Seq(tableOnly) => (None, tableOnly)
-        case Seq(databaseName, table) => (Some(databaseName), table)
-      }
-
-    (db, tableName)
-  }
-
-  protected def extractTableIdent(tableNameParts: Node): Seq[String] = {
+  protected def extractTableIdent(tableNameParts: Node): TableIdentifier = {
     tableNameParts.getChildren.asScala.map {
       case Token(part, Nil) => cleanIdentifier(part)
     } match {
-      case Seq(tableOnly) => Seq(tableOnly)
-      case Seq(databaseName, table) => Seq(databaseName, table)
+      case Seq(tableOnly) => TableIdentifier(tableOnly)
+      case Seq(databaseName, table) => TableIdentifier(table, Some(databaseName))
       case other => sys.error("Hive only supports tables names like 'tableName' " +
         s"or 'databaseName.tableName', found '$other'")
     }
@@ -458,13 +469,14 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
    * e.g. In superset (k1, k2, k3), (bit 0: k1, bit 1: k2, and bit 2: k3), the grouping id of
    * GROUPING SETS (k1, k2) and (k2) should be 3 and 2 respectively.
    */
-  protected def extractGroupingSet(children: Seq[ASTNode]): (Seq[Expression], Seq[Int]) = {
+  protected def extractGroupingSet(children: Seq[ASTNode], context: Context)
+  : (Seq[Expression], Seq[Int]) = {
     val (keyASTs, setASTs) = children.partition( n => n match {
         case Token("TOK_GROUPING_SETS_EXPRESSION", children) => false // grouping sets
         case _ => true // grouping keys
       })
 
-    val keys = keyASTs.map(nodeToExpr).toSeq
+    val keys = keyASTs.map(nodeToExpr(_, context)).toSeq
     val keyMap = keyASTs.map(_.toStringTree).zipWithIndex.toMap
 
     val bitmasks: Seq[Int] = setASTs.map(set => set match {
@@ -489,7 +501,43 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
       }
   }
 
-  protected def nodeToPlan(node: Node): LogicalPlan = node match {
+  private def createView(
+      view: ASTNode,
+      context: Context,
+      viewNameParts: ASTNode,
+      query: ASTNode,
+      schema: Seq[HiveColumn],
+      properties: Map[String, String],
+      allowExist: Boolean,
+      replace: Boolean): CreateViewAsSelect = {
+    val TableIdentifier(viewName, dbName) = extractTableIdent(viewNameParts)
+
+    val originalText = context.getTokenRewriteStream
+      .toString(query.getTokenStartIndex, query.getTokenStopIndex)
+
+    val tableDesc = HiveTable(
+      specifiedDatabase = dbName,
+      name = viewName,
+      schema = schema,
+      partitionColumns = Seq.empty[HiveColumn],
+      properties = properties,
+      serdeProperties = Map[String, String](),
+      tableType = VirtualView,
+      location = None,
+      inputFormat = None,
+      outputFormat = None,
+      serde = None,
+      viewText = Some(originalText))
+
+    // We need to keep the original SQL string so that if `spark.sql.nativeView` is
+    // false, we can fall back to use hive native command later.
+    // We can remove this when parser is configurable(can access SQLConf) in the future.
+    val sql = context.getTokenRewriteStream
+      .toString(view.getTokenStartIndex, view.getTokenStopIndex)
+    CreateViewAsSelect(tableDesc, nodeToPlan(query, context), allowExist, replace, sql)
+  }
+
+  protected def nodeToPlan(node: ASTNode, context: Context): LogicalPlan = node match {
     // Special drop table that also uncaches.
     case Token("TOK_DROPTABLE",
            Token("TOK_TABNAME", tableNameParts) ::
@@ -521,14 +569,14 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
       val Some(crtTbl) :: _ :: extended :: Nil =
         getClauses(Seq("TOK_CREATETABLE", "FORMATTED", "EXTENDED"), explainArgs)
       ExplainCommand(
-        nodeToPlan(crtTbl),
+        nodeToPlan(crtTbl, context),
         extended = extended.isDefined)
     case Token("TOK_EXPLAIN", explainArgs) =>
       // Ignore FORMATTED if present.
       val Some(query) :: _ :: extended :: Nil =
         getClauses(Seq("TOK_QUERY", "FORMATTED", "EXTENDED"), explainArgs)
       ExplainCommand(
-        nodeToPlan(query),
+        nodeToPlan(query, context),
         extended = extended.isDefined)
 
     case Token("TOK_DESCTABLE", describeArgs) =>
@@ -555,12 +603,80 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
               case tableName =>
                 // It is describing a table with the format like "describe table".
                 DescribeCommand(
-                  UnresolvedRelation(Seq(tableName.getText), None), isExtended = extended.isDefined)
+                  UnresolvedRelation(TableIdentifier(tableName.getText), None),
+                  isExtended = extended.isDefined)
             }
           }
           // All other cases.
           case _ => NativePlaceholder
         }
+      }
+
+    case view @ Token("TOK_ALTERVIEW", children) =>
+      val Some(viewNameParts) :: maybeQuery :: ignores =
+        getClauses(Seq(
+          "TOK_TABNAME",
+          "TOK_QUERY",
+          "TOK_ALTERVIEW_ADDPARTS",
+          "TOK_ALTERVIEW_DROPPARTS",
+          "TOK_ALTERVIEW_PROPERTIES",
+          "TOK_ALTERVIEW_RENAME"), children)
+
+      // if ALTER VIEW doesn't have query part, let hive to handle it.
+      maybeQuery.map { query =>
+        createView(view, context, viewNameParts, query, Nil, Map(), false, true)
+      }.getOrElse(NativePlaceholder)
+
+    case view @ Token("TOK_CREATEVIEW", children)
+        if children.collect { case t @ Token("TOK_QUERY", _) => t }.nonEmpty =>
+      val Seq(
+        Some(viewNameParts),
+        Some(query),
+        maybeComment,
+        replace,
+        allowExisting,
+        maybeProperties,
+        maybeColumns,
+        maybePartCols
+      ) = getClauses(Seq(
+        "TOK_TABNAME",
+        "TOK_QUERY",
+        "TOK_TABLECOMMENT",
+        "TOK_ORREPLACE",
+        "TOK_IFNOTEXISTS",
+        "TOK_TABLEPROPERTIES",
+        "TOK_TABCOLNAME",
+        "TOK_VIEWPARTCOLS"), children)
+
+      // If the view is partitioned, we let hive handle it.
+      if (maybePartCols.isDefined) {
+        NativePlaceholder
+      } else {
+        val schema = maybeColumns.map { cols =>
+          BaseSemanticAnalyzer.getColumns(cols, true).asScala.map { field =>
+            // We can't specify column types when create view, so fill it with null first, and
+            // update it after the schema has been resolved later.
+            HiveColumn(field.getName, null, field.getComment)
+          }
+        }.getOrElse(Seq.empty[HiveColumn])
+
+        val properties = scala.collection.mutable.Map.empty[String, String]
+
+        maybeProperties.foreach {
+          case Token("TOK_TABLEPROPERTIES", list :: Nil) =>
+            properties ++= getProperties(list)
+        }
+
+        maybeComment.foreach {
+          case Token("TOK_TABLECOMMENT", child :: Nil) =>
+            val comment = BaseSemanticAnalyzer.unescapeSQLString(child.getText)
+            if (comment ne null) {
+              properties += ("comment" -> comment)
+            }
+        }
+
+        createView(view, context, viewNameParts, query, schema, properties.toMap,
+          allowExisting.isDefined, replace.isDefined)
       }
 
     case Token("TOK_CREATETABLE", children)
@@ -593,12 +709,12 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
             "TOK_TABLELOCATION",
             "TOK_TABLEPROPERTIES"),
           children)
-      val (db, tableName) = extractDbNameTableName(tableNameParts)
+      val TableIdentifier(tblName, dbName) = extractTableIdent(tableNameParts)
 
       // TODO add bucket support
       var tableDesc: HiveTable = HiveTable(
-        specifiedDatabase = db,
-        name = tableName,
+        specifiedDatabase = dbName,
+        name = tblName,
         schema = Seq.empty[HiveColumn],
         partitionColumns = Seq.empty[HiveColumn],
         properties = Map[String, String](),
@@ -774,7 +890,7 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
         case _ => // Unsupport features
       }
 
-      CreateTableAsSelect(tableDesc, nodeToPlan(query), allowExisting != None)
+      CreateTableAsSelect(tableDesc, nodeToPlan(query, context), allowExisting != None)
 
     // If its not a "CTAS" like above then take it as a native command
     case Token("TOK_CREATETABLE", _) => NativePlaceholder
@@ -793,7 +909,7 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
             insertClauses.last match {
               case Token("TOK_CTE", cteClauses) =>
                 val cteRelations = cteClauses.map(node => {
-                  val relation = nodeToRelation(node).asInstanceOf[Subquery]
+                  val relation = nodeToRelation(node, context).asInstanceOf[Subquery]
                   (relation.alias, relation)
                 }).toMap
                 (Some(args.head), insertClauses.init, Some(cteRelations))
@@ -847,13 +963,13 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
         }
 
         val relations = fromClause match {
-          case Some(f) => nodeToRelation(f)
+          case Some(f) => nodeToRelation(f, context)
           case None => OneRowRelation
         }
 
         val withWhere = whereClause.map { whereNode =>
           val Seq(whereExpr) = whereNode.getChildren.asScala
-          Filter(nodeToExpr(whereExpr), relations)
+          Filter(nodeToExpr(whereExpr, context), relations)
         }.getOrElse(relations)
 
         val select =
@@ -954,7 +1070,7 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
 
             Some(
               logical.ScriptTransformation(
-                inputExprs.map(nodeToExpr),
+                inputExprs.map(nodeToExpr(_, context)),
                 unescapedScript,
                 output,
                 withWhere, schema))
@@ -968,7 +1084,7 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
           val alias = getClause("TOK_TABALIAS", clauses).getChildren.iterator().next()
             .asInstanceOf[ASTNode].getText
 
-          val (generator, attributes) = nodesToGenerator(clauses)
+          val (generator, attributes) = nodesToGenerator(clauses, context)
             Generate(
               generator,
               join = true,
@@ -982,28 +1098,28 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
         // (if there is a group by) or a script transformation.
         val withProject: LogicalPlan = transformation.getOrElse {
           val selectExpressions =
-            select.getChildren.asScala.flatMap(selExprNodeToExpr).map(UnresolvedAlias)
+            select.getChildren.asScala.flatMap(selExprNodeToExpr(_, context)).map(UnresolvedAlias)
           Seq(
             groupByClause.map(e => e match {
               case Token("TOK_GROUPBY", children) =>
                 // Not a transformation so must be either project or aggregation.
-                Aggregate(children.map(nodeToExpr), selectExpressions, withLateralView)
+                Aggregate(children.map(nodeToExpr(_, context)), selectExpressions, withLateralView)
               case _ => sys.error("Expect GROUP BY")
             }),
             groupingSetsClause.map(e => e match {
               case Token("TOK_GROUPING_SETS", children) =>
-                val(groupByExprs, masks) = extractGroupingSet(children)
+                val(groupByExprs, masks) = extractGroupingSet(children, context)
                 GroupingSets(masks, groupByExprs, withLateralView, selectExpressions)
               case _ => sys.error("Expect GROUPING SETS")
             }),
             rollupGroupByClause.map(e => e match {
               case Token("TOK_ROLLUP_GROUPBY", children) =>
-                Rollup(children.map(nodeToExpr), withLateralView, selectExpressions)
+                Rollup(children.map(nodeToExpr(_, context)), withLateralView, selectExpressions)
               case _ => sys.error("Expect WITH ROLLUP")
             }),
             cubeGroupByClause.map(e => e match {
               case Token("TOK_CUBE_GROUPBY", children) =>
-                Cube(children.map(nodeToExpr), withLateralView, selectExpressions)
+                Cube(children.map(nodeToExpr(_, context)), withLateralView, selectExpressions)
               case _ => sys.error("Expect WITH CUBE")
             }),
             Some(Project(selectExpressions, withLateralView))).flatten.head
@@ -1011,7 +1127,9 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
 
         // Handle HAVING clause.
         val withHaving = havingClause.map { h =>
-          val havingExpr = h.getChildren.asScala match { case Seq(hexpr) => nodeToExpr(hexpr) }
+          val havingExpr = h.getChildren.asScala match {
+            case Seq(hexpr) => nodeToExpr(hexpr, context)
+          }
           // Note that we added a cast to boolean. If the expression itself is already boolean,
           // the optimizer will get rid of the unnecessary cast.
           Filter(Cast(havingExpr, BooleanType), withProject)
@@ -1025,33 +1143,35 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
         val withSort =
           (orderByClause, sortByClause, distributeByClause, clusterByClause) match {
             case (Some(totalOrdering), None, None, None) =>
-              Sort(totalOrdering.getChildren.asScala.map(nodeToSortOrder), true, withDistinct)
+              Sort(totalOrdering.getChildren.asScala.map(nodeToSortOrder(_, context)),
+                true, withDistinct)
             case (None, Some(perPartitionOrdering), None, None) =>
               Sort(
-                perPartitionOrdering.getChildren.asScala.map(nodeToSortOrder),
+                perPartitionOrdering.getChildren.asScala.map(nodeToSortOrder(_, context)),
                 false, withDistinct)
             case (None, None, Some(partitionExprs), None) =>
               RepartitionByExpression(
-                partitionExprs.getChildren.asScala.map(nodeToExpr), withDistinct)
+                partitionExprs.getChildren.asScala.map(nodeToExpr(_, context)), withDistinct)
             case (None, Some(perPartitionOrdering), Some(partitionExprs), None) =>
               Sort(
-                perPartitionOrdering.getChildren.asScala.map(nodeToSortOrder), false,
+                perPartitionOrdering.getChildren.asScala.map(nodeToSortOrder(_, context)), false,
                 RepartitionByExpression(
-                  partitionExprs.getChildren.asScala.map(nodeToExpr),
+                  partitionExprs.getChildren.asScala.map(nodeToExpr(_, context)),
                   withDistinct))
             case (None, None, None, Some(clusterExprs)) =>
               Sort(
-                clusterExprs.getChildren.asScala.map(nodeToExpr).map(SortOrder(_, Ascending)),
+                clusterExprs.getChildren.asScala
+                  .map(nodeToExpr(_, context)).map(SortOrder(_, Ascending)),
                 false,
                 RepartitionByExpression(
-                  clusterExprs.getChildren.asScala.map(nodeToExpr),
+                  clusterExprs.getChildren.asScala.map(nodeToExpr(_, context)),
                   withDistinct))
             case (None, None, None, None) => withDistinct
             case _ => sys.error("Unsupported set of ordering / distribution clauses.")
           }
 
         val withLimit =
-          limitClause.map(l => nodeToExpr(l.getChildren.iterator().next()))
+          limitClause.map(l => nodeToExpr(l.getChildren.iterator().next(), context))
             .map(Limit(_, withSort))
             .getOrElse(withSort)
 
@@ -1059,7 +1179,7 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
         val windowDefinitions = windowClause.map(_.getChildren.asScala.collect {
           case Token("TOK_WINDOWDEF",
           Token(windowName, Nil) :: Token("TOK_WINDOWSPEC", spec) :: Nil) =>
-            windowName -> nodesToWindowSpecification(spec)
+            windowName -> nodesToWindowSpecification(spec, context)
         }.toMap)
         // Handle cases like
         // window w1 as (partition by p_mfgr order by p_name
@@ -1094,7 +1214,8 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
       cteRelations.map(With(query, _)).getOrElse(query)
 
     // HIVE-9039 renamed TOK_UNION => TOK_UNIONALL while adding TOK_UNIONDISTINCT
-    case Token("TOK_UNIONALL", left :: right :: Nil) => Union(nodeToPlan(left), nodeToPlan(right))
+    case Token("TOK_UNIONALL", left :: right :: Nil) =>
+      Union(nodeToPlan(left, context), nodeToPlan(right, context))
 
     case a: ASTNode =>
       throw new NotImplementedError(s"No parse rules for $node:\n ${dumpTree(a).toString} ")
@@ -1102,10 +1223,10 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
 
   val allJoinTokens = "(TOK_.*JOIN)".r
   val laterViewToken = "TOK_LATERAL_VIEW(.*)".r
-  def nodeToRelation(node: Node): LogicalPlan = node match {
+  def nodeToRelation(node: Node, context: Context): LogicalPlan = node match {
     case Token("TOK_SUBQUERY",
            query :: Token(alias, Nil) :: Nil) =>
-      Subquery(cleanIdentifier(alias), nodeToPlan(query))
+      Subquery(cleanIdentifier(alias), nodeToPlan(query, context))
 
     case Token(laterViewToken(isOuter), selectClause :: relationClause :: Nil) =>
       val Token("TOK_SELECT",
@@ -1114,14 +1235,14 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
       val alias = getClause("TOK_TABALIAS", clauses).getChildren.iterator().next()
         .asInstanceOf[ASTNode].getText
 
-      val (generator, attributes) = nodesToGenerator(clauses)
+      val (generator, attributes) = nodesToGenerator(clauses, context)
         Generate(
           generator,
           join = true,
           outer = isOuter.nonEmpty,
           Some(alias.toLowerCase),
           attributes.map(UnresolvedAttribute(_)),
-          nodeToRelation(relationClause))
+          nodeToRelation(relationClause, context))
 
     /* All relations, possibly with aliases or sampling clauses. */
     case Token("TOK_TABREF", clauses) =>
@@ -1140,15 +1261,7 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
           nonAliasClauses)
       }
 
-      val tableIdent =
-        tableNameParts.getChildren.asScala.map {
-          case Token(part, Nil) => cleanIdentifier(part)
-        } match {
-          case Seq(tableOnly) => Seq(tableOnly)
-          case Seq(databaseName, table) => Seq(databaseName, table)
-          case other => sys.error("Hive only supports tables names like 'tableName' " +
-            s"or 'databaseName.tableName', found '$other'")
-      }
+      val tableIdent = extractTableIdent(tableNameParts)
       val alias = aliasClause.map { case Token(a, Nil) => cleanIdentifier(a) }
       val relation = UnresolvedRelation(tableIdent, alias)
 
@@ -1189,9 +1302,9 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
         }.map(_._2)
 
       val isPreserved = tableOrdinals.map(i => (i - 1 < 0) || joinArgs(i - 1).getText == "PRESERVE")
-      val tables = tableOrdinals.map(i => nodeToRelation(joinArgs(i)))
+      val tables = tableOrdinals.map(i => nodeToRelation(joinArgs(i), context))
       val joinExpressions =
-        tableOrdinals.map(i => joinArgs(i + 1).getChildren.asScala.map(nodeToExpr))
+        tableOrdinals.map(i => joinArgs(i + 1).getChildren.asScala.map(nodeToExpr(_, context)))
 
       val joinConditions = joinExpressions.sliding(2).map {
         case Seq(c1, c2) =>
@@ -1244,20 +1357,20 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
         case "TOK_FULLOUTERJOIN" => FullOuter
         case "TOK_LEFTSEMIJOIN" => LeftSemi
       }
-      Join(nodeToRelation(relation1),
-        nodeToRelation(relation2),
+      Join(nodeToRelation(relation1, context),
+        nodeToRelation(relation2, context),
         joinType,
-        other.headOption.map(nodeToExpr))
+        other.headOption.map(nodeToExpr(_, context)))
 
     case a: ASTNode =>
       throw new NotImplementedError(s"No parse rules for:\n ${dumpTree(a).toString} ")
   }
 
-  def nodeToSortOrder(node: Node): SortOrder = node match {
+  def nodeToSortOrder(node: Node, context: Context): SortOrder = node match {
     case Token("TOK_TABSORTCOLNAMEASC", sortExpr :: Nil) =>
-      SortOrder(nodeToExpr(sortExpr), Ascending)
+      SortOrder(nodeToExpr(sortExpr, context), Ascending)
     case Token("TOK_TABSORTCOLNAMEDESC", sortExpr :: Nil) =>
-      SortOrder(nodeToExpr(sortExpr), Descending)
+      SortOrder(nodeToExpr(sortExpr, context), Descending)
 
     case a: ASTNode =>
       throw new NotImplementedError(s"No parse rules for:\n ${dumpTree(a).toString} ")
@@ -1316,12 +1429,12 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
           s"\n ${dumpTree(a).toString} ")
   }
 
-  protected def selExprNodeToExpr(node: Node): Option[Expression] = node match {
+  protected def selExprNodeToExpr(node: Node, context: Context): Option[Expression] = node match {
     case Token("TOK_SELEXPR", e :: Nil) =>
-      Some(nodeToExpr(e))
+      Some(nodeToExpr(e, context))
 
     case Token("TOK_SELEXPR", e :: Token(alias, Nil) :: Nil) =>
-      Some(Alias(nodeToExpr(e), cleanIdentifier(alias))())
+      Some(Alias(nodeToExpr(e, context), cleanIdentifier(alias))())
 
     case Token("TOK_SELEXPR", e :: aliasChildren) =>
       var aliasNames = ArrayBuffer[String]()
@@ -1330,7 +1443,7 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
         case _ =>
         }
       }
-      Some(MultiAlias(nodeToExpr(e), aliasNames))
+      Some(MultiAlias(nodeToExpr(e, context), aliasNames))
 
     /* Hints are ignored */
     case Token("TOK_HINTLIST", _) => None
@@ -1379,14 +1492,39 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
   val BETWEEN = "(?i)BETWEEN".r
   val WHEN = "(?i)WHEN".r
   val CASE = "(?i)CASE".r
+  val EXISTS = "(?i)EXISTS".r
 
-  protected def nodeToExpr(node: Node): Expression = node match {
+  protected def nodeToExpr(node: Node, context: Context): Expression = node match {
+    case Token(NOT(),
+           Token("TOK_SUBQUERY_EXPR",
+           Token("TOK_SUBQUERY_OP", Token(EXISTS(), Nil) :: Nil) ::
+             subquery :: Nil) :: Nil) =>
+      Exists(nodeToPlan(subquery, context), false)
+    case Token("TOK_SUBQUERY_EXPR",
+           Token("TOK_SUBQUERY_OP", Token(EXISTS(), Nil) :: Nil) ::
+             subquery :: Nil) =>
+      Exists(nodeToPlan(subquery, context), true)
+    case Token(NOT(),
+           Token("TOK_SUBQUERY_EXPR",
+           Token("TOK_SUBQUERY_OP", Token(IN(), Nil) :: Nil) ::
+             subquery ::
+             expr :: Nil) :: Nil) =>
+      InSubquery(nodeToExpr(expr, context),
+        nodeToPlan(subquery, context),
+        false)
+    case Token("TOK_SUBQUERY_EXPR",
+           Token("TOK_SUBQUERY_OP", Token(IN(), Nil) :: Nil) ::
+             subquery ::
+             expr :: Nil) =>
+      InSubquery(nodeToExpr(expr, context),
+        nodeToPlan(subquery, context),
+        true)
     /* Attribute References */
     case Token("TOK_TABLE_OR_COL",
            Token(name, Nil) :: Nil) =>
       UnresolvedAttribute.quoted(cleanIdentifier(name))
     case Token(".", qualifier :: Token(attr, Nil) :: Nil) =>
-      nodeToExpr(qualifier) match {
+      nodeToExpr(qualifier, context) match {
         case UnresolvedAttribute(nameParts) =>
           UnresolvedAttribute(nameParts :+ cleanIdentifier(attr))
         case other => UnresolvedExtractValue(other, Literal(attr))
@@ -1401,77 +1539,99 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
 
     /* Aggregate Functions */
     case Token("TOK_FUNCTIONSTAR", Token(COUNT(), Nil) :: Nil) => Count(Literal(1))
-    case Token("TOK_FUNCTIONDI", Token(COUNT(), Nil) :: args) => CountDistinct(args.map(nodeToExpr))
-    case Token("TOK_FUNCTIONDI", Token(SUM(), Nil) :: arg :: Nil) => SumDistinct(nodeToExpr(arg))
+    case Token("TOK_FUNCTIONDI", Token(COUNT(), Nil) :: args) =>
+      CountDistinct(args.map(nodeToExpr(_, context)))
+    case Token("TOK_FUNCTIONDI", Token(SUM(), Nil) :: arg :: Nil) =>
+      SumDistinct(nodeToExpr(arg, context))
 
     /* Casts */
     case Token("TOK_FUNCTION", Token("TOK_STRING", Nil) :: arg :: Nil) =>
-      Cast(nodeToExpr(arg), StringType)
+      Cast(nodeToExpr(arg, context), StringType)
     case Token("TOK_FUNCTION", Token("TOK_VARCHAR", _) :: arg :: Nil) =>
-      Cast(nodeToExpr(arg), StringType)
+      Cast(nodeToExpr(arg, context), StringType)
     case Token("TOK_FUNCTION", Token("TOK_CHAR", _) :: arg :: Nil) =>
-      Cast(nodeToExpr(arg), StringType)
+      Cast(nodeToExpr(arg, context), StringType)
     case Token("TOK_FUNCTION", Token("TOK_INT", Nil) :: arg :: Nil) =>
-      Cast(nodeToExpr(arg), IntegerType)
+      Cast(nodeToExpr(arg, context), IntegerType)
     case Token("TOK_FUNCTION", Token("TOK_BIGINT", Nil) :: arg :: Nil) =>
-      Cast(nodeToExpr(arg), LongType)
+      Cast(nodeToExpr(arg, context), LongType)
     case Token("TOK_FUNCTION", Token("TOK_FLOAT", Nil) :: arg :: Nil) =>
-      Cast(nodeToExpr(arg), FloatType)
+      Cast(nodeToExpr(arg, context), FloatType)
     case Token("TOK_FUNCTION", Token("TOK_DOUBLE", Nil) :: arg :: Nil) =>
-      Cast(nodeToExpr(arg), DoubleType)
+      Cast(nodeToExpr(arg, context), DoubleType)
     case Token("TOK_FUNCTION", Token("TOK_SMALLINT", Nil) :: arg :: Nil) =>
-      Cast(nodeToExpr(arg), ShortType)
+      Cast(nodeToExpr(arg, context), ShortType)
     case Token("TOK_FUNCTION", Token("TOK_TINYINT", Nil) :: arg :: Nil) =>
-      Cast(nodeToExpr(arg), ByteType)
+      Cast(nodeToExpr(arg, context), ByteType)
     case Token("TOK_FUNCTION", Token("TOK_BINARY", Nil) :: arg :: Nil) =>
-      Cast(nodeToExpr(arg), BinaryType)
+      Cast(nodeToExpr(arg, context), BinaryType)
     case Token("TOK_FUNCTION", Token("TOK_BOOLEAN", Nil) :: arg :: Nil) =>
-      Cast(nodeToExpr(arg), BooleanType)
+      Cast(nodeToExpr(arg, context), BooleanType)
     case Token("TOK_FUNCTION", Token("TOK_DECIMAL", precision :: scale :: nil) :: arg :: Nil) =>
-      Cast(nodeToExpr(arg), DecimalType(precision.getText.toInt, scale.getText.toInt))
+      Cast(nodeToExpr(arg, context), DecimalType(precision.getText.toInt, scale.getText.toInt))
     case Token("TOK_FUNCTION", Token("TOK_DECIMAL", precision :: Nil) :: arg :: Nil) =>
-      Cast(nodeToExpr(arg), DecimalType(precision.getText.toInt, 0))
+      Cast(nodeToExpr(arg, context), DecimalType(precision.getText.toInt, 0))
     case Token("TOK_FUNCTION", Token("TOK_DECIMAL", Nil) :: arg :: Nil) =>
-      Cast(nodeToExpr(arg), DecimalType.USER_DEFAULT)
+      Cast(nodeToExpr(arg, context), DecimalType.USER_DEFAULT)
     case Token("TOK_FUNCTION", Token("TOK_TIMESTAMP", Nil) :: arg :: Nil) =>
-      Cast(nodeToExpr(arg), TimestampType)
+      Cast(nodeToExpr(arg, context), TimestampType)
     case Token("TOK_FUNCTION", Token("TOK_DATE", Nil) :: arg :: Nil) =>
-      Cast(nodeToExpr(arg), DateType)
+      Cast(nodeToExpr(arg, context), DateType)
 
     /* Arithmetic */
-    case Token("+", child :: Nil) => nodeToExpr(child)
-    case Token("-", child :: Nil) => UnaryMinus(nodeToExpr(child))
-    case Token("~", child :: Nil) => BitwiseNot(nodeToExpr(child))
-    case Token("+", left :: right:: Nil) => Add(nodeToExpr(left), nodeToExpr(right))
-    case Token("-", left :: right:: Nil) => Subtract(nodeToExpr(left), nodeToExpr(right))
-    case Token("*", left :: right:: Nil) => Multiply(nodeToExpr(left), nodeToExpr(right))
-    case Token("/", left :: right:: Nil) => Divide(nodeToExpr(left), nodeToExpr(right))
+    case Token("+", child :: Nil) => nodeToExpr(child, context)
+    case Token("-", child :: Nil) => UnaryMinus(nodeToExpr(child, context))
+    case Token("~", child :: Nil) => BitwiseNot(nodeToExpr(child, context))
+    case Token("+", left :: right:: Nil) =>
+      Add(nodeToExpr(left, context), nodeToExpr(right, context))
+    case Token("-", left :: right:: Nil) =>
+      Subtract(nodeToExpr(left, context), nodeToExpr(right, context))
+    case Token("*", left :: right:: Nil) =>
+      Multiply(nodeToExpr(left, context), nodeToExpr(right, context))
+    case Token("/", left :: right:: Nil) =>
+      Divide(nodeToExpr(left, context), nodeToExpr(right, context))
     case Token(DIV(), left :: right:: Nil) =>
-      Cast(Divide(nodeToExpr(left), nodeToExpr(right)), LongType)
-    case Token("%", left :: right:: Nil) => Remainder(nodeToExpr(left), nodeToExpr(right))
-    case Token("&", left :: right:: Nil) => BitwiseAnd(nodeToExpr(left), nodeToExpr(right))
-    case Token("|", left :: right:: Nil) => BitwiseOr(nodeToExpr(left), nodeToExpr(right))
-    case Token("^", left :: right:: Nil) => BitwiseXor(nodeToExpr(left), nodeToExpr(right))
+      Cast(Divide(nodeToExpr(left, context), nodeToExpr(right, context)), LongType)
+    case Token("%", left :: right:: Nil) =>
+      Remainder(nodeToExpr(left, context), nodeToExpr(right, context))
+    case Token("&", left :: right:: Nil) =>
+      BitwiseAnd(nodeToExpr(left, context), nodeToExpr(right, context))
+    case Token("|", left :: right:: Nil) =>
+      BitwiseOr(nodeToExpr(left, context), nodeToExpr(right, context))
+    case Token("^", left :: right:: Nil) =>
+      BitwiseXor(nodeToExpr(left, context), nodeToExpr(right, context))
 
     /* Comparisons */
-    case Token("=", left :: right:: Nil) => EqualTo(nodeToExpr(left), nodeToExpr(right))
-    case Token("==", left :: right:: Nil) => EqualTo(nodeToExpr(left), nodeToExpr(right))
-    case Token("<=>", left :: right:: Nil) => EqualNullSafe(nodeToExpr(left), nodeToExpr(right))
-    case Token("!=", left :: right:: Nil) => Not(EqualTo(nodeToExpr(left), nodeToExpr(right)))
-    case Token("<>", left :: right:: Nil) => Not(EqualTo(nodeToExpr(left), nodeToExpr(right)))
-    case Token(">", left :: right:: Nil) => GreaterThan(nodeToExpr(left), nodeToExpr(right))
-    case Token(">=", left :: right:: Nil) => GreaterThanOrEqual(nodeToExpr(left), nodeToExpr(right))
-    case Token("<", left :: right:: Nil) => LessThan(nodeToExpr(left), nodeToExpr(right))
-    case Token("<=", left :: right:: Nil) => LessThanOrEqual(nodeToExpr(left), nodeToExpr(right))
-    case Token(LIKE(), left :: right:: Nil) => Like(nodeToExpr(left), nodeToExpr(right))
-    case Token(RLIKE(), left :: right:: Nil) => RLike(nodeToExpr(left), nodeToExpr(right))
-    case Token(REGEXP(), left :: right:: Nil) => RLike(nodeToExpr(left), nodeToExpr(right))
+    case Token("=", left :: right:: Nil) =>
+      EqualTo(nodeToExpr(left, context), nodeToExpr(right, context))
+    case Token("==", left :: right:: Nil) =>
+      EqualTo(nodeToExpr(left, context), nodeToExpr(right, context))
+    case Token("<=>", left :: right:: Nil) =>
+      EqualNullSafe(nodeToExpr(left, context), nodeToExpr(right, context))
+    case Token("!=", left :: right:: Nil) =>
+      Not(EqualTo(nodeToExpr(left, context), nodeToExpr(right, context)))
+    case Token("<>", left :: right:: Nil) =>
+      Not(EqualTo(nodeToExpr(left, context), nodeToExpr(right, context)))
+    case Token(">", left :: right:: Nil) =>
+      GreaterThan(nodeToExpr(left, context), nodeToExpr(right, context))
+    case Token(">=", left :: right:: Nil) =>
+      GreaterThanOrEqual(nodeToExpr(left, context), nodeToExpr(right, context))
+    case Token("<", left :: right:: Nil) =>
+      LessThan(nodeToExpr(left, context), nodeToExpr(right, context))
+    case Token("<=", left :: right:: Nil) =>
+      LessThanOrEqual(nodeToExpr(left, context), nodeToExpr(right, context))
+    case Token(LIKE(), left :: right:: Nil) =>
+      Like(nodeToExpr(left, context), nodeToExpr(right, context))
+    case Token(RLIKE(), left :: right:: Nil) =>
+      RLike(nodeToExpr(left, context), nodeToExpr(right, context))
+    case Token(REGEXP(), left :: right:: Nil) =>
+      RLike(nodeToExpr(left, context), nodeToExpr(right, context))
     case Token("TOK_FUNCTION", Token("TOK_ISNOTNULL", Nil) :: child :: Nil) =>
-      IsNotNull(nodeToExpr(child))
+      IsNotNull(nodeToExpr(child, context))
     case Token("TOK_FUNCTION", Token("TOK_ISNULL", Nil) :: child :: Nil) =>
-      IsNull(nodeToExpr(child))
+      IsNull(nodeToExpr(child, context))
     case Token("TOK_FUNCTION", Token(IN(), Nil) :: value :: list) =>
-      In(nodeToExpr(value), list.map(nodeToExpr))
+      In(nodeToExpr(value, context), list.map(nodeToExpr(_, context)))
     case Token("TOK_FUNCTION",
            Token(BETWEEN(), Nil) ::
            kw ::
@@ -1479,37 +1639,39 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
            minValue ::
            maxValue :: Nil) =>
 
-      val targetExpression = nodeToExpr(target)
+      val targetExpression = nodeToExpr(target, context)
       val betweenExpr =
         And(
-          GreaterThanOrEqual(targetExpression, nodeToExpr(minValue)),
-          LessThanOrEqual(targetExpression, nodeToExpr(maxValue)))
+          GreaterThanOrEqual(targetExpression, nodeToExpr(minValue, context)),
+          LessThanOrEqual(targetExpression, nodeToExpr(maxValue, context)))
       kw match {
         case Token("KW_FALSE", Nil) => betweenExpr
         case Token("KW_TRUE", Nil) => Not(betweenExpr)
       }
 
     /* Boolean Logic */
-    case Token(AND(), left :: right:: Nil) => And(nodeToExpr(left), nodeToExpr(right))
-    case Token(OR(), left :: right:: Nil) => Or(nodeToExpr(left), nodeToExpr(right))
-    case Token(NOT(), child :: Nil) => Not(nodeToExpr(child))
-    case Token("!", child :: Nil) => Not(nodeToExpr(child))
+    case Token(AND(), left :: right:: Nil) =>
+      And(nodeToExpr(left, context), nodeToExpr(right, context))
+    case Token(OR(), left :: right:: Nil) =>
+      Or(nodeToExpr(left, context), nodeToExpr(right, context))
+    case Token(NOT(), child :: Nil) => Not(nodeToExpr(child, context))
+    case Token("!", child :: Nil) => Not(nodeToExpr(child, context))
 
     /* Case statements */
     case Token("TOK_FUNCTION", Token(WHEN(), Nil) :: branches) =>
-      CaseWhen(branches.map(nodeToExpr))
+      CaseWhen(branches.map(nodeToExpr(_, context)))
     case Token("TOK_FUNCTION", Token(CASE(), Nil) :: branches) =>
-      val keyExpr = nodeToExpr(branches.head)
-      CaseKeyWhen(keyExpr, branches.drop(1).map(nodeToExpr))
+      val keyExpr = nodeToExpr(branches.head, context)
+      CaseKeyWhen(keyExpr, branches.drop(1).map(nodeToExpr(_, context)))
 
     /* Complex datatype manipulation */
     case Token("[", child :: ordinal :: Nil) =>
-      UnresolvedExtractValue(nodeToExpr(child), nodeToExpr(ordinal))
+      UnresolvedExtractValue(nodeToExpr(child, context), nodeToExpr(ordinal, context))
 
     /* Window Functions */
     case Token("TOK_FUNCTION", Token(name, Nil) +: args :+ Token("TOK_WINDOWSPEC", spec)) =>
-      val function = UnresolvedWindowFunction(name, args.map(nodeToExpr))
-      nodesToWindowSpecification(spec) match {
+      val function = UnresolvedWindowFunction(name, args.map(nodeToExpr(_, context)))
+      nodesToWindowSpecification(spec, context) match {
         case reference: WindowSpecReference =>
           UnresolvedWindowExpression(function, reference)
         case definition: WindowSpecDefinition =>
@@ -1518,7 +1680,7 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
     case Token("TOK_FUNCTIONSTAR", Token(name, Nil) :: Token("TOK_WINDOWSPEC", spec) :: Nil) =>
       // Safe to use Literal(1)?
       val function = UnresolvedWindowFunction(name, Literal(1) :: Nil)
-      nodesToWindowSpecification(spec) match {
+      nodesToWindowSpecification(spec, context) match {
         case reference: WindowSpecReference =>
           UnresolvedWindowExpression(function, reference)
         case definition: WindowSpecDefinition =>
@@ -1527,10 +1689,10 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
 
     /* UDFs - Must be last otherwise will preempt built in functions */
     case Token("TOK_FUNCTION", Token(name, Nil) :: args) =>
-      UnresolvedFunction(name, args.map(nodeToExpr), isDistinct = false)
+      UnresolvedFunction(name, args.map(nodeToExpr(_, context)), isDistinct = false)
     // Aggregate function with DISTINCT keyword.
     case Token("TOK_FUNCTIONDI", Token(name, Nil) :: args) =>
-      UnresolvedFunction(name, args.map(nodeToExpr), isDistinct = true)
+      UnresolvedFunction(name, args.map(nodeToExpr(_, context)), isDistinct = true)
     case Token("TOK_FUNCTIONSTAR", Token(name, Nil) :: args) =>
       UnresolvedFunction(name, UnresolvedStar(None) :: Nil, isDistinct = false)
 
@@ -1618,7 +1780,7 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
   val PRECEDING = "(?i)preceding".r
   val FOLLOWING = "(?i)following".r
   val CURRENT = "(?i)current".r
-  def nodesToWindowSpecification(nodes: Seq[ASTNode]): WindowSpec = nodes match {
+  def nodesToWindowSpecification(nodes: Seq[ASTNode], context: Context): WindowSpec = nodes match {
     case Token(windowName, Nil) :: Nil =>
       // Refer to a window spec defined in the window clause.
       WindowSpecReference(windowName)
@@ -1646,14 +1808,14 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
 
         (partitionByClause, orderByClause.orElse(sortByClause), clusterByClause) match {
           case (Some(partitionByExpr), Some(orderByExpr), None) =>
-            (partitionByExpr.getChildren.asScala.map(nodeToExpr),
-              orderByExpr.getChildren.asScala.map(nodeToSortOrder))
+            (partitionByExpr.getChildren.asScala.map(nodeToExpr(_, context)),
+              orderByExpr.getChildren.asScala.map(nodeToSortOrder(_, context)))
           case (Some(partitionByExpr), None, None) =>
-            (partitionByExpr.getChildren.asScala.map(nodeToExpr), Nil)
+            (partitionByExpr.getChildren.asScala.map(nodeToExpr(_, context)), Nil)
           case (None, Some(orderByExpr), None) =>
-            (Nil, orderByExpr.getChildren.asScala.map(nodeToSortOrder))
+            (Nil, orderByExpr.getChildren.asScala.map(nodeToSortOrder(_, context)))
           case (None, None, Some(clusterByExpr)) =>
-            val expressions = clusterByExpr.getChildren.asScala.map(nodeToExpr)
+            val expressions = clusterByExpr.getChildren.asScala.map(nodeToExpr(_, context))
             (expressions, expressions.map(SortOrder(_, Ascending)))
           case _ =>
             throw new NotImplementedError(
@@ -1711,7 +1873,7 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
   }
 
   val explode = "(?i)explode".r
-  def nodesToGenerator(nodes: Seq[Node]): (Generator, Seq[String]) = {
+  def nodesToGenerator(nodes: Seq[Node], context: Context): (Generator, Seq[String]) = {
     val function = nodes.head
 
     val attributes = nodes.flatMap {
@@ -1721,7 +1883,7 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
 
     function match {
       case Token("TOK_FUNCTION", Token(explode(), Nil) :: child :: Nil) =>
-        (Explode(nodeToExpr(child)), attributes)
+        (Explode(nodeToExpr(child, context)), attributes)
 
       case Token("TOK_FUNCTION", Token(functionName, Nil) :: children) =>
         val functionInfo: FunctionInfo =
@@ -1731,7 +1893,7 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
 
         (HiveGenericUDTF(
           new HiveFunctionWrapper(functionClassName),
-          children.map(nodeToExpr)), attributes)
+          children.map(nodeToExpr(_, context))), attributes)
 
       case a: ASTNode =>
         throw new NotImplementedError(
