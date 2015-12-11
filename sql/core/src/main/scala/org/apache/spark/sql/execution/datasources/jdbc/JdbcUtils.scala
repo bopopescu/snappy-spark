@@ -62,8 +62,15 @@ object JdbcUtils extends Logging {
    * Returns a PreparedStatement that inserts a row into table via conn.
    */
   def insertStatement(conn: Connection, table: String, rddSchema: StructType): PreparedStatement = {
-    val sql = new StringBuilder(s"INSERT INTO $table VALUES (")
+    val sql = new StringBuilder(s"INSERT INTO $table (")
     var fieldsLeft = rddSchema.fields.length
+    rddSchema.fields map { field =>
+      sql.append(field.name)
+      if (fieldsLeft > 1) sql.append(", ") else sql.append(")")
+      fieldsLeft = fieldsLeft - 1
+    }
+    sql.append("VALUES (")
+    fieldsLeft = rddSchema.fields.length
     while (fieldsLeft > 0) {
       sql.append("?")
       if (fieldsLeft > 1) sql.append(", ") else sql.append(")")
@@ -96,7 +103,6 @@ object JdbcUtils extends Logging {
     val conn = getConnection()
     var committed = false
     try {
-      conn.setAutoCommit(false) // Everything in the same db transaction.
       val stmt = insertStatement(conn, table, rddSchema)
       try {
         var rowCount = 0

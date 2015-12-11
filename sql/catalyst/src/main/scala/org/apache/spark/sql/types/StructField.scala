@@ -51,4 +51,8 @@ case class StructField(
       ("nullable" -> nullable) ~
       ("metadata" -> metadata.jsonValue)
   }
+
+  private[sql] def fieldName: String = {
+    if (metadata.contains("name")) metadata.getString("name") else name
+  }
 }
