@@ -31,7 +31,7 @@ import org.apache.spark.util.{MetadataCleaner, Utils}
 import org.apache.spark.streaming.scheduler.JobGenerator
 
 
-private[streaming]
+/*private[streaming]*/
 class Checkpoint(ssc: StreamingContext, val checkpointTime: Time)
   extends Logging with Serializable {
   val master = ssc.sc.master

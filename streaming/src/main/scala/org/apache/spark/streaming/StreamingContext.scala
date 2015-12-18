@@ -57,7 +57,7 @@ import org.apache.spark.util.{CallSite, ShutdownHookManager, ThreadUtils, Utils}
  * `context.awaitTermination()` allows the current thread to wait for the termination
  * of the context by `stop()` or by an exception.
  */
-class StreamingContext private[streaming] (
+class StreamingContext /* private[streaming] */ (
     sc_ : SparkContext,
     cp_ : Checkpoint,
     batchDur_ : Duration
