@@ -248,6 +248,17 @@ private[sql] case class EnsureRequirements(sqlContext: SQLContext) extends Rule[
           Exchange(targetPartitioning, child)
         }
       }
+
+      //TODO This is a temporary code which is needed as snappy relations are location dependent.
+      // Once they are able to execute from any node this should be removed
+      if (!Partitioning.allCompatible(children.map(_.outputPartitioning))) {
+        if (children.map(_.outputPartitioning.isInstanceOf[OrderlessHashPartitioning]).forall(_ == true)) {
+          children = children.zip(requiredChildDistributions).map { case (child, distribution) =>
+            val targetPartitioning = canonicalPartitioning(distribution, numPartitions)
+            Exchange(targetPartitioning, child)
+          }
+        }
+      }
     }
 
     // Now that we've performed any necessary shuffles, add sorts to guarantee output orderings:
