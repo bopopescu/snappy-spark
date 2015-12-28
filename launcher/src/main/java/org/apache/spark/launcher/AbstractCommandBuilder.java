@@ -202,6 +202,8 @@ abstract class AbstractCommandBuilder {
       for (File jar : libdir.listFiles()) {
         if (jar.getName().startsWith("datanucleus-")) {
           addToClassPath(cp, jar.getAbsolutePath());
+        } else if (jar.getName().contains("-aqp-")) {
+          addToClassPath(cp, jar.getAbsolutePath());
         }
       }
     } else {
