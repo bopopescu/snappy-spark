@@ -19,7 +19,9 @@ package org.apache.spark.streaming.dstream
 
 
 import java.io.{IOException, ObjectInputStream, ObjectOutputStream}
+import java.util.concurrent.ConcurrentHashMap
 
+import scala.collection.mutable
 import scala.collection.mutable.HashMap
 import scala.language.implicitConversions
 import scala.reflect.ClassTag
@@ -81,9 +83,17 @@ abstract class DStream[T: ClassTag] (
   // Methods and fields available on all DStreams
   // =======================================================================
 
+  import scala.collection.JavaConverters._
   // RDDs generated, marked as private[streaming] so that testsuites can access it
   @transient
-  private[streaming] var generatedRDDs = new HashMap[Time, RDD[T]] ()
+  /* private[streaming] */ // var generatedRDDs = new HashMap[Time, RDD[T]] ()
+  var generatedRDDs: scala.collection.mutable.Map[Time, RDD[T]] = _
+
+  initGeneratedRDDs()
+
+  def initGeneratedRDDs(): Unit = {
+    generatedRDDs = new ConcurrentHashMap[Time, RDD[T]]().asScala
+  }
 
   // Time zero for the DStream
   private[streaming] var zeroTime: Time = null
@@ -100,9 +110,9 @@ abstract class DStream[T: ClassTag] (
   private[streaming] val checkpointData = new DStreamCheckpointData(this)
 
   // Reference to whole DStream graph
-  /*private[streaming]*/var graph: DStreamGraph = null
+  /* private[streaming] */var graph: DStreamGraph = null
 
-  /*private[streaming]*/ def isInitialized = (zeroTime != null)
+  /* private[streaming] */ def isInitialized = (zeroTime != null)
 
   // Duration for which the DStream requires its parent DStream to remember each RDD created
   private[streaming] def parentRememberDuration = rememberDuration
@@ -218,26 +228,31 @@ abstract class DStream[T: ClassTag] (
    * @param time
    */
   def initializeAfterContextStart(time: Time) {
-    if (zeroTime != null && zeroTime != time) {
-      throw new SparkException("ZeroTime is already initialized to " + zeroTime
-        + ", cannot initialize it again to " + time)
-    }
-    zeroTime = time
+    if (!isInitialized){
+      if (zeroTime != null && zeroTime != time) {
+        throw new SparkException("ZeroTime is already initialized to " + zeroTime
+            + ", cannot initialize it again to " + time)
+      }
+      zeroTime = time
 
-    // Set the checkpoint interval to be slideDuration or 10 seconds, which ever is larger
-    if (mustCheckpoint && checkpointDuration == null) {
-      checkpointDuration = slideDuration * math.ceil(Seconds(10) / slideDuration).toInt
-      logInfo("Checkpoint interval automatically set to " + checkpointDuration)
-    }
+      // Set the checkpoint interval to be slideDuration or 10 seconds, which ever is larger
+      if (mustCheckpoint && checkpointDuration == null) {
+        checkpointDuration = slideDuration * math.ceil(Seconds(10) / slideDuration).toInt
+        logInfo("Checkpoint interval automatically set to " + checkpointDuration)
+      }
 
-    // Set the minimum value of the rememberDuration if not already set
-    var minRememberDuration = slideDuration
-    if (checkpointDuration != null && minRememberDuration <= checkpointDuration) {
-      // times 2 just to be sure that the latest checkpoint is not forgotten (#paranoia)
-      minRememberDuration = checkpointDuration * 2
-    }
-    if (rememberDuration == null || rememberDuration < minRememberDuration) {
-      rememberDuration = minRememberDuration
+      // Set the minimum value of the rememberDuration if not already set
+      var minRememberDuration = slideDuration
+      if (checkpointDuration != null && minRememberDuration <= checkpointDuration) {
+        // times 2 just to be sure that the latest checkpoint is not forgotten (#paranoia)
+        minRememberDuration = checkpointDuration * 2
+      }
+      if (rememberDuration == null || rememberDuration < minRememberDuration) {
+        rememberDuration = minRememberDuration
+      }
+
+      // Initialize the dependencies
+      dependencies.foreach(_.initializeAfterContextStart(zeroTime))
     }
   }
 
@@ -246,9 +261,9 @@ abstract class DStream[T: ClassTag] (
       case StreamingContextState.INITIALIZED =>
         // good to go
       case StreamingContextState.ACTIVE =>
-/*        throw new IllegalStateException(
+        /* throw new IllegalStateException(
           "Adding new inputs, transformations, and output operations after " +
-            "starting a context is not supported")*/
+            "starting a context is not supported") */
       case StreamingContextState.STOPPED =>
         throw new IllegalStateException(
           "Adding new inputs, transformations, and output operations after " +
@@ -362,7 +377,7 @@ abstract class DStream[T: ClassTag] (
    * Get the RDD corresponding to the given time; either retrieve it from cache
    * or compute-and-cache it.
    */
-  /*private[streaming]*/ final def getOrCompute(time: Time): Option[RDD[T]] = {
+  /* private[streaming] */ final def getOrCompute(time: Time): Option[RDD[T]] = {
     // If RDD was already generated, then retrieve it from HashMap,
     // or else compute the RDD
     generatedRDDs.get(time).orElse {
@@ -546,7 +561,8 @@ abstract class DStream[T: ClassTag] (
   private def readObject(ois: ObjectInputStream): Unit = Utils.tryOrIOException {
     logDebug(this.getClass().getSimpleName + ".readObject used")
     ois.defaultReadObject()
-    generatedRDDs = new HashMap[Time, RDD[T]] ()
+    // generatedRDDs = new HashMap[Time, RDD[T]] ()
+    initGeneratedRDDs()
   }
 
   // =======================================================================
@@ -669,7 +685,11 @@ abstract class DStream[T: ClassTag] (
     // because the DStream is reachable from the outer object here, and because
     // DStreams can't be serialized with closures, we can't proactively check
     // it for serializability and so we pass the optional false to SparkContext.clean
-    new ForEachDStream(this, context.sparkContext.clean(foreachFunc, false)).register()
+    val dStream = new ForEachDStream(this, context.sparkContext.clean(foreachFunc, false))
+    if(ssc.getState() == StreamingContextState.ACTIVE) {
+      dStream.initializeAfterContextStart(ssc.graph.zeroTime)
+    }
+    dStream.register()
   }
 
   /**
@@ -949,7 +969,7 @@ abstract class DStream[T: ClassTag] (
    * Register this streaming as an output stream. This would ensure that RDDs of this
    * DStream will be generated.
    */
-  private[streaming] def register(): DStream[T] = {
+  /* private[streaming] */ def register(): DStream[T] = {
     ssc.graph.addOutputStream(this)
     this
   }
