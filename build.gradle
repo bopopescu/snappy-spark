@@ -97,7 +97,7 @@ task cleanSparkJUnit << {
 }
 
 subprojects {
-  // when invoking from snappy-commons, below are already defined at top-level
+  // when invoking from snappydata, below are already defined at top-level
   if (rootProject.name == 'snappy-spark') {
     task packageSources(type: Jar, dependsOn: classes) {
       classifier = 'sources'
