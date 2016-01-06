@@ -44,6 +44,7 @@ dependencies {
     exclude(module: 'curator-recipes')
     exclude(module: 'libfb303')
     exclude(module: 'libthrift')
+    exclude(module: 'jetty-all')
   }
   compile(group: 'org.spark-project.hive', name: 'hive-beeline', version: '1.2.1.spark') {
     exclude(module: 'hive-common')
