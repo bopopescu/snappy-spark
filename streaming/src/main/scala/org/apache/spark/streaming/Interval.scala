@@ -17,7 +17,7 @@
 
 package org.apache.spark.streaming
 
-private[streaming]
+/* private[streaming] */
 class Interval(val beginTime: Time, val endTime: Time) {
   def this(beginMs: Long, endMs: Long) = this(new Time(beginMs), new Time(endMs))
 
