@@ -17,35 +17,27 @@
 
 package org.apache.spark.scheduler
 
-import org.scalatest.BeforeAndAfter
 import org.apache.spark.scheduler.local.LocalBackend
 import org.apache.spark.{SparkContext, SparkFunSuite, SparkConf}
 
 
+class CheckExternalClusterManager extends ExternalClusterManager {
+
+  def canCreate(masterURL: String): Boolean = masterURL == "myclusterManager"
+
+  def createTaskScheduler(sc: SparkContext): TaskScheduler = new TaskSchedulerImpl(sc,
+    1, isLocal = true)
+
+  def createSchedulerBackend(sc: SparkContext, scheduler: TaskScheduler): SchedulerBackend =
+    new LocalBackend(sc.getConf, scheduler.asInstanceOf[TaskSchedulerImpl], 2)
+
+  def initialize(scheduler: TaskScheduler, backend: SchedulerBackend): Unit =
+    scheduler.asInstanceOf[TaskSchedulerImpl].initialize(backend)
+
+}
+
 class ExternalClusterManagerSuite extends SparkFunSuite
-with BeforeAndAfter {
-
-  val mycm = new ExternalClusterManager {
-
-    def canCreate(masterURL: String): Boolean = masterURL == "myclusterManager"
-
-    def createTaskScheduler(sc: SparkContext): TaskScheduler = new TaskSchedulerImpl(sc,
-      1, isLocal = true)
-
-    def createSchedulerBackend(sc: SparkContext, scheduler: TaskScheduler): SchedulerBackend =
-      new LocalBackend(sc.getConf, scheduler.asInstanceOf[TaskSchedulerImpl], 2)
-
-    def initialize(scheduler: TaskScheduler, backend: SchedulerBackend): Unit =
-      scheduler.asInstanceOf[TaskSchedulerImpl].initialize(backend)
-
-  }
-  before {
-    SparkContext.registerClusterManager(mycm)
-  }
-  after {
-    SparkContext.unregisterClusterManager(mycm)
-  }
-
+{
   test("launch of backend and scheduler") {
     val conf = new SparkConf().setMaster("myclusterManager").setAppName("testcm")
     val sc = new SparkContext(conf)
