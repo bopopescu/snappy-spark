@@ -41,7 +41,7 @@ allprojects {
   compileJava.options.compilerArgs << '-Xlint:all,-serial,-path'
 
   group = 'org.apache.spark'
-  version = '1.5.1-SNAPSHOT.1'
+  version = '1.6.0-SNAPSHOT'
 
   ext {
     scalaBinaryVersion = '2.10'
@@ -97,7 +97,7 @@ task cleanSparkJUnit << {
 }
 
 subprojects {
-  // when invoking from snappy-commons, below are already defined at top-level
+  // when invoking from snappydata, below are already defined at top-level
   if (rootProject.name == 'snappy-spark') {
     task packageSources(type: Jar, dependsOn: classes) {
       classifier = 'sources'
