@@ -66,20 +66,61 @@ case class InterpretedMutableProjection(expressions: Seq[Expression]) extends Mu
     case n: Nondeterministic => n.setInitialValues()
     case _ =>
   })
-
+  private var targetUnsafe = false
+  type UnsafeSetter = (UnsafeRow,  Any ) => Unit
+  private var setters : Array[UnsafeSetter] = _
   private[this] val exprArray = expressions.toArray
   private[this] var mutableRow: MutableRow = new GenericMutableRow(exprArray.length)
   def currentValue: InternalRow = mutableRow
 
+
   override def target(row: MutableRow): MutableProjection = {
     mutableRow = row
+    targetUnsafe = row match {
+      case _:UnsafeRow =>{
+        if(setters == null) {
+          setters = Array.ofDim[UnsafeSetter](exprArray.length)
+          for(i <- 0 until exprArray.length) {
+            setters(i) = exprArray(i).dataType match {
+              case IntegerType => (target: UnsafeRow,  value: Any ) =>
+                target.setInt(i,value.asInstanceOf[Int])
+              case LongType => (target: UnsafeRow,  value: Any ) =>
+                target.setLong(i,value.asInstanceOf[Long])
+              case DoubleType => (target: UnsafeRow,  value: Any ) =>
+                target.setDouble(i,value.asInstanceOf[Double])
+              case FloatType => (target: UnsafeRow, value: Any ) =>
+                target.setFloat(i,value.asInstanceOf[Float])
+
+              case NullType => (target: UnsafeRow,  value: Any ) =>
+                target.setNullAt(i)
+
+              case BooleanType => (target: UnsafeRow,  value: Any ) =>
+                target.setBoolean(i,value.asInstanceOf[Boolean])
+
+              case ByteType => (target: UnsafeRow,  value: Any ) =>
+                target.setByte(i,value.asInstanceOf[Byte])
+              case ShortType => (target: UnsafeRow, value: Any ) =>
+                target.setShort(i,value.asInstanceOf[Short])
+
+            }
+          }
+        }
+        true
+      }
+      case _ => false
+    }
+
     this
   }
 
   override def apply(input: InternalRow): InternalRow = {
     var i = 0
     while (i < exprArray.length) {
-      mutableRow(i) = exprArray(i).eval(input)
+      if(targetUnsafe) {
+        setters(i)(mutableRow.asInstanceOf[UnsafeRow], exprArray(i).eval(input))
+      }else {
+        mutableRow(i) = exprArray(i).eval(input)
+      }
       i += 1
     }
     mutableRow
