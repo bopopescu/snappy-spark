@@ -125,10 +125,30 @@ object GenerateSafeProjection extends CodeGenerator[Seq[Expression], Projection]
     case MapType(keyType, valueType, _) => createCodeForMap(ctx, input, keyType, valueType)
     // UTF8String act as a pointer if it's inside UnsafeRow, so copy it to make it safe.
     case StringType => GeneratedExpressionCode("", "false", s"$input.clone()")
-    case udt: UserDefinedType[_] => convertToSafe(ctx, input, udt.sqlType)
+    case udt: UserDefinedType[_] => convertStructToUDT(convertToSafe(ctx, input, udt.sqlType),
+    ctx, input, dataType)
     case _ => GeneratedExpressionCode("", "false", input)
   }
 
+  private def convertStructToUDT(gec: GeneratedExpressionCode, ctx: CodeGenContext,
+                                 input: String, dataType: DataType): GeneratedExpressionCode= {
+
+    val udtClass = dataType.getClass.getName
+    val partCode = gec.code + "\n"
+    val partOutput = gec.value
+    val udtInstance = "udtInstance"
+    val newCode = partCode + ( if (udtClass.endsWith("$")) {
+      s"""final Object $udtInstance = $udtClass.MODULE""" +"$.deserialize" + s"""($partOutput); """
+    } else {
+      s"""
+      final Object $udtInstance = new $udtClass().deserialize($partOutput);
+    """
+    }
+      )
+
+    GeneratedExpressionCode(newCode, "false", udtInstance)
+
+  }
   protected def create(expressions: Seq[Expression]): Projection = {
     val ctx = newCodeGenContext()
     val expressionCodes = expressions.zipWithIndex.map {
