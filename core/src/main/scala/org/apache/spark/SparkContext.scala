@@ -40,7 +40,7 @@ import scala.language.implicitConversions
 import java.io._
 import java.lang.reflect.Constructor
 import java.net.URI
-import java.util.{Arrays, Properties, UUID}
+import java.util.{ServiceLoader, Arrays, Properties, UUID}
 import java.util.concurrent.atomic.{AtomicReference, AtomicBoolean, AtomicInteger}
 import java.util.UUID.randomUUID
 
@@ -2233,11 +2233,6 @@ object SparkContext extends Logging {
   private var contextBeingConstructed: Option[SparkContext] = None
 
   /**
-   * List of registered cluster managers. Based on the master URL, one
-   * of them is chosen and is asked to create backend scheduler.
-   */
-  private var registeredClusterManagers = List[ExternalClusterManager]()
-  /**
    * Called to ensure that no other SparkContext is running in this JVM.
    *
    * Throws an exception if a running context is detected and logs a warning if another thread is
@@ -2759,27 +2754,16 @@ object SparkContext extends Logging {
   }
 
   private def getClusterManager(url: String): Option[ExternalClusterManager] = {
-    val matchingCMs = registeredClusterManagers.filter(_.canCreate(url))
-    matchingCMs.length match {
-      case 0 => None
-      case _ => Some(matchingCMs.head)
+    val loader = Utils.getContextOrSparkClassLoader
+    val serviceLoader = ServiceLoader.load(classOf[ExternalClusterManager], loader)
+
+    serviceLoader.asScala.filter(_.canCreate(url)).toList match {
+      // exactly one registered manager
+      case head :: Nil => Some(head)
+      case Nil => None
+      case multipleMgrs => sys.error(s"Multiple Cluster Managers registered " +
+          s"for the url $url")
     }
-  }
-
-  /**
-   * Register a cluster manager that can be used to create [[TaskScheduler]] and [[SchedulerBackend]].
-   * @param ecm the new cluster manager
-   */
-  def registerClusterManager(ecm : ExternalClusterManager): Unit = {
-    registeredClusterManagers = ecm :: registeredClusterManagers.filterNot(_ == ecm)
-  }
-
-  /**
-   * Unregisters a cluster manager. This function is mainly added for completeness.
-   * @param ecm the cluster manager
-   */
-  def unregisterClusterManager(ecm : ExternalClusterManager) : Unit = {
-    registeredClusterManagers = registeredClusterManagers.filterNot(_ == ecm)
   }
 }
 
