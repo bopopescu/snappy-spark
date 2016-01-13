@@ -90,18 +90,14 @@ case class InterpretedMutableProjection(expressions: Seq[Expression]) extends Mu
                 target.setDouble(i,value.asInstanceOf[Double])
               case FloatType => (target: UnsafeRow, value: Any ) =>
                 target.setFloat(i,value.asInstanceOf[Float])
-
               case NullType => (target: UnsafeRow,  value: Any ) =>
                 target.setNullAt(i)
-
               case BooleanType => (target: UnsafeRow,  value: Any ) =>
                 target.setBoolean(i,value.asInstanceOf[Boolean])
-
               case ByteType => (target: UnsafeRow,  value: Any ) =>
                 target.setByte(i,value.asInstanceOf[Byte])
               case ShortType => (target: UnsafeRow, value: Any ) =>
                 target.setShort(i,value.asInstanceOf[Short])
-
             }
           }
         }
