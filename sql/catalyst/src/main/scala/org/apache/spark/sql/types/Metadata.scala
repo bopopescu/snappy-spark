@@ -38,7 +38,7 @@ import org.apache.spark.annotation.DeveloperApi
  * @param map an immutable map that stores the data
  */
 @DeveloperApi
-sealed class Metadata private[types] (private[types] val map: Map[String, Any])
+sealed class Metadata private[sql] (private[sql] val map: Map[String, Any])
   extends Serializable {
 
   /** No-arg constructor for kryo. */
