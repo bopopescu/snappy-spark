@@ -56,8 +56,7 @@ import org.apache.spark.unsafe.types.CalendarInterval
  * This is currently included mostly for illustrative purposes.  Users wanting more complete support
  * for a SQL like language should checkout the HiveQL support in the sql/hive sub-project.
  */
-object SqlParser extends SqlParserBase {
-}
+object SqlParser extends SqlParserBase
 
 class SqlParserBase extends AbstractSparkSQLParser with DataTypeParser {
 

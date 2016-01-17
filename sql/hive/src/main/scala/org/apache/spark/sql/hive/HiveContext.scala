@@ -45,8 +45,8 @@ import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.expressions.{Expression, LeafExpression}
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.{InternalRow, ParserDialect, SqlParser}
-import org.apache.spark.sql.execution.datasources.{ResolveDataSource, DataSourceStrategy, PreInsertCastAndRename, PreWriteCheck}
+import org.apache.spark.sql.catalyst.{InternalRow, ParserDialect, SqlParser, TableIdentifier}
+import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, PreInsertCastAndRename, PreWriteCheck, ResolveDataSource}
 import org.apache.spark.sql.execution.ui.SQLListener
 import org.apache.spark.sql.execution.{CacheManager, ExecutedCommand, ExtractPythonUDFs, SetCommand}
 import org.apache.spark.sql.hive.client._
@@ -65,6 +65,14 @@ private[hive] class HiveQLDialect(sqlContext: HiveContext) extends ParserDialect
     sqlContext.executionHive.withHiveState {
       HiveQl.parseSql(sqlText)
     }
+  }
+
+  override def parseExpression(input: String): Expression = {
+    SqlParser.parseExpression(input)
+  }
+
+  override def parseTableIdentifier(input: String): TableIdentifier = {
+    SqlParser.parseTableIdentifier(input)
   }
 }
 
