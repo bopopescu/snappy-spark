@@ -234,7 +234,7 @@ class StorageStatus(val blockManagerId: BlockManagerId, val maxMem: Long) {
   /**
    Different from updateStorageInfo, in that for external block store keeps
    adding the storage size if info exists for block id (as opposed to adjusting
-   the size to lower value, if new BlockStatus send lesser value than
+   the size to lower value, if new BlockStatus has lesser size than
    existing status)
   */
   private def updateOrAddStorageInfo(blockId: BlockId, newBlockStatus: BlockStatus): Unit = {
