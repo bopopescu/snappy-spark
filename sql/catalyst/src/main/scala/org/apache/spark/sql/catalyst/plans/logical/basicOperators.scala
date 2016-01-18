@@ -173,6 +173,14 @@ case class InsertIntoTable(
   }
 }
 
+case class PutIntoTable(
+    override val table: LogicalPlan,
+    override val partition: Map[String, Option[String]],
+    override val child: LogicalPlan,
+    override val overwrite: Boolean,
+    override val ifNotExists: Boolean)
+    extends InsertIntoTable(table, partition, child, overwrite, ifNotExists)
+
 /**
  * A container for holding named common table expressions (CTEs) and a query plan.
  * This operator will be removed during analysis and the relations will be substituted into child.
