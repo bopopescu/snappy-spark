@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst
 
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 
 /**
@@ -30,6 +31,12 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 abstract class ParserDialect {
   // this is the main function that will be implemented by sql parser.
   def parse(sqlText: String): LogicalPlan
+
+  // parse expressions in a projection
+  def parseExpression(input: String): Expression
+
+  // parse table identifiers
+  def parseTableIdentifier(input: String): TableIdentifier
 }
 
 /**
@@ -61,9 +68,17 @@ abstract class ParserDialect {
  */
 private[spark] class DefaultParserDialect extends ParserDialect {
   @transient
-  protected val sqlParser = SqlParser
+  protected val sqlParser: SqlParserBase = SqlParser
 
   override def parse(sqlText: String): LogicalPlan = {
     sqlParser.parse(sqlText)
+  }
+
+  override def parseExpression(input: String): Expression = {
+    sqlParser.parseExpression(input)
+  }
+
+  override def parseTableIdentifier(input: String): TableIdentifier = {
+    sqlParser.parseTableIdentifier(input)
   }
 }

@@ -206,10 +206,13 @@ class SQLContext private[sql](
   protected[sql] lazy val optimizer: Optimizer = DefaultOptimizer
 
   @transient
+  protected[sql] val sqlDialect = getSQLDialect()
+
+  @transient
   protected[sql] val ddlParser = new DDLParser(sqlParser.parse(_))
 
   @transient
-  protected[sql] val sqlParser = new SparkSQLParser(getSQLDialect().parse(_))
+  protected[sql] val sqlParser = new SparkSQLParser(sqlDialect.parse)
 
   protected[sql] def getSQLDialect(): ParserDialect = {
     try {
@@ -661,7 +664,7 @@ class SQLContext private[sql](
       tableName: String,
       source: String,
       options: Map[String, String]): DataFrame = {
-    val tableIdent = SqlParser.parseTableIdentifier(tableName)
+    val tableIdent = sqlDialect.parseTableIdentifier(tableName)
     val cmd =
       CreateTableUsing(
         tableIdent,
@@ -707,7 +710,7 @@ class SQLContext private[sql](
       source: String,
       schema: StructType,
       options: Map[String, String]): DataFrame = {
-    val tableIdent = SqlParser.parseTableIdentifier(tableName)
+    val tableIdent = sqlDialect.parseTableIdentifier(tableName)
     val cmd =
       CreateTableUsing(
         tableIdent,
@@ -803,7 +806,7 @@ class SQLContext private[sql](
    * @since 1.3.0
    */
   def table(tableName: String): DataFrame = {
-    table(SqlParser.parseTableIdentifier(tableName))
+    table(sqlDialect.parseTableIdentifier(tableName))
   }
 
   private def table(tableIdent: TableIdentifier): DataFrame = {

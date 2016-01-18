@@ -192,7 +192,7 @@ final class MutableAny extends MutableValue {
  * based on the dataTypes of each column.  The intent is to decrease garbage when modifying the
  * values of primitive columns.
  */
-final class SpecificMutableRow(val values: Array[MutableValue])
+class SpecificMutableRow(val values: Array[MutableValue])
   extends MutableRow with BaseGenericInternalRow {
 
   def this(dataTypes: Seq[DataType]) =
@@ -212,15 +212,15 @@ final class SpecificMutableRow(val values: Array[MutableValue])
 
   def this() = this(Seq.empty)
 
-  override def numFields: Int = values.length
+  override final def numFields: Int = values.length
 
-  override def setNullAt(i: Int): Unit = {
+  override final def setNullAt(i: Int): Unit = {
     values(i).isNull = true
   }
 
-  override def isNullAt(i: Int): Boolean = values(i).isNull
+  override final def isNullAt(i: Int): Boolean = values(i).isNull
 
-  override def copy(): InternalRow = {
+  override final def copy(): InternalRow = {
     val newValues = new Array[Any](values.length)
     var i = 0
     while (i < values.length) {
@@ -231,9 +231,9 @@ final class SpecificMutableRow(val values: Array[MutableValue])
     new GenericInternalRow(newValues)
   }
 
-  override protected def genericGet(i: Int): Any = values(i).boxed
+  override final protected def genericGet(i: Int): Any = values(i).boxed
 
-  override def update(ordinal: Int, value: Any) {
+  override final def update(ordinal: Int, value: Any) {
     if (value == null) {
       setNullAt(ordinal)
     } else {
@@ -241,73 +241,73 @@ final class SpecificMutableRow(val values: Array[MutableValue])
     }
   }
 
-  override def setInt(ordinal: Int, value: Int): Unit = {
+  override final def setInt(ordinal: Int, value: Int): Unit = {
     val currentValue = values(ordinal).asInstanceOf[MutableInt]
     currentValue.isNull = false
     currentValue.value = value
   }
 
-  override def getInt(i: Int): Int = {
+  override final def getInt(i: Int): Int = {
     values(i).asInstanceOf[MutableInt].value
   }
 
-  override def setFloat(ordinal: Int, value: Float): Unit = {
+  override final def setFloat(ordinal: Int, value: Float): Unit = {
     val currentValue = values(ordinal).asInstanceOf[MutableFloat]
     currentValue.isNull = false
     currentValue.value = value
   }
 
-  override def getFloat(i: Int): Float = {
+  override final def getFloat(i: Int): Float = {
     values(i).asInstanceOf[MutableFloat].value
   }
 
-  override def setBoolean(ordinal: Int, value: Boolean): Unit = {
+  override final def setBoolean(ordinal: Int, value: Boolean): Unit = {
     val currentValue = values(ordinal).asInstanceOf[MutableBoolean]
     currentValue.isNull = false
     currentValue.value = value
   }
 
-  override def getBoolean(i: Int): Boolean = {
+  override final def getBoolean(i: Int): Boolean = {
     values(i).asInstanceOf[MutableBoolean].value
   }
 
-  override def setDouble(ordinal: Int, value: Double): Unit = {
+  override final def setDouble(ordinal: Int, value: Double): Unit = {
     val currentValue = values(ordinal).asInstanceOf[MutableDouble]
     currentValue.isNull = false
     currentValue.value = value
   }
 
-  override def getDouble(i: Int): Double = {
+  override final def getDouble(i: Int): Double = {
     values(i).asInstanceOf[MutableDouble].value
   }
 
-  override def setShort(ordinal: Int, value: Short): Unit = {
+  override final def setShort(ordinal: Int, value: Short): Unit = {
     val currentValue = values(ordinal).asInstanceOf[MutableShort]
     currentValue.isNull = false
     currentValue.value = value
   }
 
-  override def getShort(i: Int): Short = {
+  override final def getShort(i: Int): Short = {
     values(i).asInstanceOf[MutableShort].value
   }
 
-  override def setLong(ordinal: Int, value: Long): Unit = {
+  override final def setLong(ordinal: Int, value: Long): Unit = {
     val currentValue = values(ordinal).asInstanceOf[MutableLong]
     currentValue.isNull = false
     currentValue.value = value
   }
 
-  override def getLong(i: Int): Long = {
+  override final def getLong(i: Int): Long = {
     values(i).asInstanceOf[MutableLong].value
   }
 
-  override def setByte(ordinal: Int, value: Byte): Unit = {
+  override final def setByte(ordinal: Int, value: Byte): Unit = {
     val currentValue = values(ordinal).asInstanceOf[MutableByte]
     currentValue.isNull = false
     currentValue.value = value
   }
 
-  override def getByte(i: Int): Byte = {
+  override final def getByte(i: Int): Byte = {
     values(i).asInstanceOf[MutableByte].value
   }
 }

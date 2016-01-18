@@ -806,7 +806,7 @@ class DataFrame private[sql](
   @scala.annotation.varargs
   def selectExpr(exprs: String*): DataFrame = {
     select(exprs.map { expr =>
-      Column(SqlParser.parseExpression(expr))
+      Column(sqlContext.sqlDialect.parseExpression(expr))
     }: _*)
   }
 
@@ -831,7 +831,7 @@ class DataFrame private[sql](
    * @since 1.3.0
    */
   def filter(conditionExpr: String): DataFrame = {
-    filter(Column(SqlParser.parseExpression(conditionExpr)))
+    filter(Column(sqlContext.sqlDialect.parseExpression(conditionExpr)))
   }
 
   /**
@@ -855,7 +855,7 @@ class DataFrame private[sql](
    * @since 1.5.0
    */
   def where(conditionExpr: String): DataFrame = {
-    filter(Column(SqlParser.parseExpression(conditionExpr)))
+    filter(Column(sqlContext.sqlDialect.parseExpression(conditionExpr)))
   }
 
   /**
