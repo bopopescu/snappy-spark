@@ -89,7 +89,7 @@ class StorageStatus(val blockManagerId: BlockManagerId, val maxMem: Long) {
   /** Add the given block to this storage status. If it already exists, overwrite it. */
   private[spark] def addBlock(blockId: BlockId, blockStatus: BlockStatus): Unit = {
 //    updateStorageInfo(blockId, blockStatus)
-    snappy_updateStorageInfo(blockId, blockStatus)
+    updateOrAddStorageInfo(blockId, blockStatus)
     blockId match {
       case RDDBlockId(rddId, _) =>
         _rddBlocks.getOrElseUpdate(rddId, new mutable.HashMap)(blockId) = blockStatus
@@ -231,7 +231,13 @@ class StorageStatus(val blockManagerId: BlockManagerId, val maxMem: Long) {
     }
   }
 
-  private def snappy_updateStorageInfo(blockId: BlockId, newBlockStatus: BlockStatus): Unit = {
+  /**
+   Different from updateStorageInfo, in that for external block store keeps
+   adding the storage size if info exists for block id (as opposed to adjusting
+   the size to lower value, if new BlockStatus send lesser value than
+   existing status)
+  */
+  private def updateOrAddStorageInfo(blockId: BlockId, newBlockStatus: BlockStatus): Unit = {
     val oldBlockStatus = getBlock(blockId).getOrElse(BlockStatus.empty)
     val changeInMem = newBlockStatus.memSize - oldBlockStatus.memSize
     val changeInDisk = newBlockStatus.diskSize - oldBlockStatus.diskSize
