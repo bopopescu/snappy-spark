@@ -73,6 +73,10 @@ class StorageListener(storageStatusListener: StorageStatusListener) extends Bloc
     rddInfos.foreach { info => _rddInfoMap.getOrElseUpdate(info.id, info) }
   }
 
+  def registerRDDInfo(rddInfo: RDDInfo): Unit = synchronized {
+    _rddInfoMap.getOrElseUpdate(rddInfo.id, rddInfo)
+  }
+
   override def onStageCompleted(stageCompleted: SparkListenerStageCompleted): Unit = synchronized {
     // Remove all partitions that are no longer cached in current completed stage
     val completedRddIds = stageCompleted.stageInfo.rddInfos.map(r => r.id).toSet
