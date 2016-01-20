@@ -88,7 +88,8 @@ class StorageStatus(val blockManagerId: BlockManagerId, val maxMem: Long) {
 
   /** Add the given block to this storage status. If it already exists, overwrite it. */
   private[spark] def addBlock(blockId: BlockId, blockStatus: BlockStatus): Unit = {
-    updateStorageInfo(blockId, blockStatus)
+//    updateStorageInfo(blockId, blockStatus)
+    updateOrAddStorageInfo(blockId, blockStatus)
     blockId match {
       case RDDBlockId(rddId, _) =>
         _rddBlocks.getOrElseUpdate(rddId, new mutable.HashMap)(blockId) = blockStatus
@@ -215,6 +216,47 @@ class StorageStatus(val blockManagerId: BlockManagerId, val maxMem: Long) {
     val newMem = math.max(oldMem + changeInMem, 0L)
     val newDisk = math.max(oldDisk + changeInDisk, 0L)
     val newExternalBlockStore = math.max(oldExternalBlockStore + changeInExternalBlockStore, 0L)
+
+    // Set the correct info
+    blockId match {
+      case RDDBlockId(rddId, _) =>
+        // If this RDD is no longer persisted, remove it
+        if (newMem + newDisk + newExternalBlockStore == 0) {
+          _rddStorageInfo.remove(rddId)
+        } else {
+          _rddStorageInfo(rddId) = (newMem, newDisk, newExternalBlockStore, level)
+        }
+      case _ =>
+        _nonRddStorageInfo = (newMem, newDisk, newExternalBlockStore)
+    }
+  }
+
+  /**
+   Different from updateStorageInfo, in that for external block store keeps
+   adding the storage size if info exists for block id (as opposed to adjusting
+   the size to lower value, if new BlockStatus has lesser size than
+   existing status)
+  */
+  private def updateOrAddStorageInfo(blockId: BlockId, newBlockStatus: BlockStatus): Unit = {
+    val oldBlockStatus = getBlock(blockId).getOrElse(BlockStatus.empty)
+    val changeInMem = newBlockStatus.memSize - oldBlockStatus.memSize
+    val changeInDisk = newBlockStatus.diskSize - oldBlockStatus.diskSize
+//    val changeInExternalBlockStore =
+//      newBlockStatus.externalBlockStoreSize - oldBlockStatus.externalBlockStoreSize
+    val level = newBlockStatus.storageLevel
+
+    // Compute new info from old info
+    val (oldMem, oldDisk, oldExternalBlockStore) = blockId match {
+      case RDDBlockId(rddId, _) =>
+        _rddStorageInfo.get(rddId)
+            .map { case (mem, disk, externalBlockStore, _) => (mem, disk, externalBlockStore) }
+            .getOrElse((0L, 0L, 0L))
+      case _ =>
+        _nonRddStorageInfo
+    }
+    val newMem = math.max(oldMem + changeInMem, 0L)
+    val newDisk = math.max(oldDisk + changeInDisk, 0L)
+    val newExternalBlockStore = newBlockStatus.externalBlockStoreSize + oldExternalBlockStore
 
     // Set the correct info
     blockId match {
