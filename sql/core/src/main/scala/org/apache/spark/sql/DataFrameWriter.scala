@@ -38,7 +38,7 @@ import org.apache.spark.sql.sources.HadoopFsRelation
  * @since 1.4.0
  */
 @Experimental
-final class DataFrameWriter private[sql](df: DataFrame) {
+final class DataFrameWriter private[sql](val df: DataFrame) {
 
   /**
    * Specifies the behavior when data or table already exists. Options include:
@@ -345,6 +345,6 @@ final class DataFrameWriter private[sql](df: DataFrame) {
 
   private var extraOptions = new scala.collection.mutable.HashMap[String, String]
 
-  private var partitioningColumns: Option[Seq[String]] = None
+  private[sql] var partitioningColumns: Option[Seq[String]] = None
 
 }
