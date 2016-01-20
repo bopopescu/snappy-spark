@@ -170,7 +170,6 @@ class SqlParserBase extends AbstractSparkSQLParser with DataTypeParser {
       case o ~ r ~ s => InsertIntoTable(r, Map.empty[String, Option[String]], s, o, false)
     }
 
-
   protected lazy val cte: Parser[LogicalPlan] =
     WITH ~> rep1sep(ident ~ ( AS ~ "(" ~> start1 <~ ")"), ",") ~ (start1 | insert) ^^ {
       case r ~ s => With(s, r.map({case n ~ s => (n, Subquery(n, s))}).toMap)
