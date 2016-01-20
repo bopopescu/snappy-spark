@@ -79,14 +79,10 @@ object JdbcUtils extends Logging {
   /**
    * Returns a PreparedStatement that inserts a row into table via conn.
    */
-  def insertStatement(conn: Connection, table: String, rddSchema: StructType,
-      upsert: Boolean): PreparedStatement = {
-    val sql = if (!upsert) {
-      new StringBuilder(s"INSERT INTO $table (")
-    }
-    else {
-      new StringBuilder(s"PUT INTO $table (")
-    }
+  def insertStatement(conn: Connection, table: String, rddSchema: StructType
+      ): PreparedStatement = {
+    val sql = new StringBuilder(s"INSERT INTO $table (")
+
     var fieldsLeft = rddSchema.fields.length
     rddSchema.fields map { field =>
       sql.append(field.name)
@@ -103,26 +99,6 @@ object JdbcUtils extends Logging {
     conn.prepareStatement(sql.toString())
   }
 
-  /**
-   * Returns a PreparedStatement that inserts a row into table via conn.
-   */
-  def putStatement(conn: Connection, table: String, rddSchema: StructType): PreparedStatement = {
-    val sql = new StringBuilder(s"PUT INTO $table (")
-    var fieldsLeft = rddSchema.fields.length
-    rddSchema.fields map { field =>
-      sql.append(field.name)
-      if (fieldsLeft > 1) sql.append(", ") else sql.append(")")
-      fieldsLeft = fieldsLeft - 1
-    }
-    sql.append("VALUES (")
-    fieldsLeft = rddSchema.fields.length
-    while (fieldsLeft > 0) {
-      sql.append("?")
-      if (fieldsLeft > 1) sql.append(", ") else sql.append(")")
-      fieldsLeft = fieldsLeft - 1
-    }
-    conn.prepareStatement(sql.toString())
-  }
   /**
    * Saves a partition of a DataFrame to the JDBC database.  This is done in
    * a single database transaction in order to avoid repeatedly inserting
@@ -143,12 +119,11 @@ object JdbcUtils extends Logging {
       iterator: Iterator[Row],
       rddSchema: StructType,
       nullTypes: Array[Int],
-      batchSize: Int,
-      upsert: Boolean): Iterator[Byte] = {
+      batchSize: Int): Iterator[Byte] = {
     val conn = getConnection()
     var committed = false
     try {
-      val stmt = insertStatement(conn, table, rddSchema, upsert)
+      val stmt = insertStatement(conn, table, rddSchema)
       try {
         var rowCount = 0
         while (iterator.hasNext) {
@@ -250,8 +225,7 @@ object JdbcUtils extends Logging {
       df: DataFrame,
       url: String,
       table: String,
-      properties: Properties = new Properties(),
-      upsert: Boolean = false) {
+      properties: Properties = new Properties()) {
     val dialect = JdbcDialects.get(url)
     val nullTypes: Array[Int] = df.schema.fields.map { field =>
       dialect.getJDBCType(field.dataType).map(_.jdbcNullType).getOrElse(
@@ -278,7 +252,7 @@ object JdbcUtils extends Logging {
     val getConnection: () => Connection = JDBCRDD.getConnector(driver, url, properties)
     val batchSize = properties.getProperty("batchsize", "1000").toInt
     df.foreachPartition { iterator =>
-      savePartition(getConnection, table, iterator, rddSchema, nullTypes, batchSize, upsert)
+      savePartition(getConnection, table, iterator, rddSchema, nullTypes, batchSize)
     }
   }
 

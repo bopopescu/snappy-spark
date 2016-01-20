@@ -341,10 +341,10 @@ final class DataFrameWriter private[sql](val df: DataFrame) {
 
   private var source: String = df.sqlContext.conf.defaultDataSourceName
 
-  var mode: SaveMode = SaveMode.ErrorIfExists
+  private var mode: SaveMode = SaveMode.ErrorIfExists
 
   private var extraOptions = new scala.collection.mutable.HashMap[String, String]
 
-  var partitioningColumns: Option[Seq[String]] = None
+  private[sql] var partitioningColumns: Option[Seq[String]] = None
 
 }
