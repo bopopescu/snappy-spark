@@ -24,7 +24,7 @@ import scala.collection.JavaConverters._
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql.catalyst.{SqlParser, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
-import org.apache.spark.sql.catalyst.plans.logical.InsertIntoTable
+import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoTable}
 import org.apache.spark.sql.execution.datasources.jdbc.JdbcUtils
 import org.apache.spark.sql.execution.datasources.{CreateTableUsingAsSelect, ResolvedDataSource}
 import org.apache.spark.sql.sources.HadoopFsRelation
@@ -38,7 +38,7 @@ import org.apache.spark.sql.sources.HadoopFsRelation
  * @since 1.4.0
  */
 @Experimental
-final class DataFrameWriter private[sql](df: DataFrame) {
+final class DataFrameWriter private[sql](val df: DataFrame) {
 
   /**
    * Specifies the behavior when data or table already exists. Options include:
@@ -341,10 +341,10 @@ final class DataFrameWriter private[sql](df: DataFrame) {
 
   private var source: String = df.sqlContext.conf.defaultDataSourceName
 
-  private var mode: SaveMode = SaveMode.ErrorIfExists
+  var mode: SaveMode = SaveMode.ErrorIfExists
 
   private var extraOptions = new scala.collection.mutable.HashMap[String, String]
 
-  private var partitioningColumns: Option[Seq[String]] = None
+  var partitioningColumns: Option[Seq[String]] = None
 
 }
