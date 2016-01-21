@@ -15,6 +15,25 @@
  * limitations under the License.
  */
 
+/*
+ * Changes for SnappyData additions and modifications.
+ *
+ * Portions Copyright (c) 2016 SnappyData, Inc. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License"); you
+ * may not use this file except in compliance with the License. You
+ * may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+ * implied. See the License for the specific language governing
+ * permissions and limitations under the License. See accompanying
+ * LICENSE file.
+ */
+
 package org.apache.spark.storage
 
 import scala.collection.Map
@@ -89,10 +108,11 @@ class StorageStatus(val blockManagerId: BlockManagerId, val maxMem: Long) {
   /** Add the given block to this storage status. If it already exists, overwrite it. */
   private[spark] def addBlock(blockId: BlockId, blockStatus: BlockStatus): Unit = {
 //    updateStorageInfo(blockId, blockStatus)
-    updateOrAddStorageInfo(blockId, blockStatus)
+    val updatedBlockStatus = updateOrAddStorageInfo(blockId, blockStatus)
     blockId match {
       case RDDBlockId(rddId, _) =>
-        _rddBlocks.getOrElseUpdate(rddId, new mutable.HashMap)(blockId) = blockStatus
+//        _rddBlocks.getOrElseUpdate(rddId, new mutable.HashMap)(blockId) = blockStatus
+        _rddBlocks.getOrElseUpdate(rddId, new mutable.HashMap)(blockId) = updatedBlockStatus
       case _ =>
         _nonRddBlocks(blockId) = blockStatus
     }
@@ -232,17 +252,24 @@ class StorageStatus(val blockManagerId: BlockManagerId, val maxMem: Long) {
   }
 
   /**
-   Different from updateStorageInfo, in that for external block store keeps
-   adding the storage size if info exists for block id (as opposed to adjusting
-   the size to lower value, if new BlockStatus has lesser size than
-   existing status)
-  */
-  private def updateOrAddStorageInfo(blockId: BlockId, newBlockStatus: BlockStatus): Unit = {
+   * Different from updateStorageInfo, in that, for external block store,
+   * this function keeps adding the storage size if info exists for block id
+   * (as opposed to adjusting the size to lower value, if new BlockStatus has
+   * lesser size than existing status)
+   */
+  private def updateOrAddStorageInfo(blockId: BlockId, newBlockStatus: BlockStatus): BlockStatus = {
     val oldBlockStatus = getBlock(blockId).getOrElse(BlockStatus.empty)
     val changeInMem = newBlockStatus.memSize - oldBlockStatus.memSize
     val changeInDisk = newBlockStatus.diskSize - oldBlockStatus.diskSize
 //    val changeInExternalBlockStore =
 //      newBlockStatus.externalBlockStoreSize - oldBlockStatus.externalBlockStoreSize
+    var externalStoreSizeForBlockId: Long = 0L
+    // 0 size is case of BlockStatus.Empty called from removeBlock
+    if (newBlockStatus.externalBlockStoreSize != 0) {
+      externalStoreSizeForBlockId =
+          newBlockStatus.externalBlockStoreSize + oldBlockStatus.externalBlockStoreSize
+    }
+
     val level = newBlockStatus.storageLevel
 
     // Compute new info from old info
@@ -256,7 +283,15 @@ class StorageStatus(val blockManagerId: BlockManagerId, val maxMem: Long) {
     }
     val newMem = math.max(oldMem + changeInMem, 0L)
     val newDisk = math.max(oldDisk + changeInDisk, 0L)
-    val newExternalBlockStore = newBlockStatus.externalBlockStoreSize + oldExternalBlockStore
+//    val newExternalBlockStore = math.max(oldExternalBlockStore + changeInExternalBlockStore, 0L)
+    var newExternalBlockStore: Long = 0L
+    if (newBlockStatus.externalBlockStoreSize != 0) {
+      newExternalBlockStore = newBlockStatus.externalBlockStoreSize + oldExternalBlockStore
+    } else {
+      // 0 size is case of BlockStatus.Empty called from removeBlock
+      // so deduct the old allocated size from rdd size
+      newExternalBlockStore = oldExternalBlockStore - oldBlockStatus.externalBlockStoreSize
+    }
 
     // Set the correct info
     blockId match {
@@ -270,6 +305,7 @@ class StorageStatus(val blockManagerId: BlockManagerId, val maxMem: Long) {
       case _ =>
         _nonRddStorageInfo = (newMem, newDisk, newExternalBlockStore)
     }
+    BlockStatus(level, newBlockStatus.memSize, newBlockStatus.diskSize, externalStoreSizeForBlockId)
   }
 
 }
