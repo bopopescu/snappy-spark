@@ -53,7 +53,7 @@ package object debug {
   implicit class DebugQuery(query: DataFrame) extends Logging {
     def debug(): Unit = {
       val plan = query.queryExecution.executedPlan
-      val visited = new collection.mutable.HashSet[TreeNodeRef]()
+      val visited = new scala.collection.mutable.HashSet[TreeNodeRef]()
       val debugPlan = plan transform {
         case s: SparkPlan if !visited.contains(new TreeNodeRef(s)) =>
           visited += new TreeNodeRef(s)

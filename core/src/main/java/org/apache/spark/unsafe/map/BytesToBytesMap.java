@@ -426,7 +426,8 @@ public final class BytesToBytesMap extends MemoryConsumer {
    *
    * This is a thread-safe version of `lookup`, could be used by multiple threads.
    */
-  public void safeLookup(Object keyBase, long keyOffset, int keyLength, Location loc) {
+  public void safeLookup(Object keyBase, long keyOffset, int keyLength,
+      BytesToBytesMap.Location loc) {
     assert(bitset != null);
     assert(longArray != null);
 
