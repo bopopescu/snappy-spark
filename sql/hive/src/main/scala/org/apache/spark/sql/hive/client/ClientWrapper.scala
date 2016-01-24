@@ -40,6 +40,7 @@ import java.util.{Map => JMap}
 import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.JavaConverters._
+import scala.collection.mutable.ArrayBuffer
 import scala.language.reflectiveCalls
 
 import org.apache.hadoop.fs.Path
@@ -456,7 +457,28 @@ private[hive] class ClientWrapper(
   }
 
   override def listTables(dbName: String): Seq[String] = withHiveState {
-    client.getAllTables(dbName).asScala
+    // if dbName is null then get all tables for all databases
+    if (dbName == null) {
+      val allTables = new ArrayBuffer[String]()
+      val currentDb = this.currentDatabase
+      var hasCurrentDb = false
+      val databases = client.getAllDatabases.iterator()
+      while (databases.hasNext) {
+        val db = databases.next()
+        if (!hasCurrentDb && db == currentDb) {
+          allTables ++= client.getAllTables(db).asScala
+          hasCurrentDb = true
+        } else {
+          allTables ++= client.getAllTables(db).asScala.map(db + '.' + _)
+        }
+      }
+      if (!hasCurrentDb) {
+        allTables ++= client.getAllTables(currentDb).asScala
+      }
+      allTables
+    } else {
+      client.getAllTables(dbName).asScala
+    }
   }
 
   /**
