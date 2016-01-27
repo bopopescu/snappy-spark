@@ -40,7 +40,7 @@ allprojects {
   compileScala.options.encoding = 'UTF-8'
   compileJava.options.compilerArgs << '-Xlint:all,-serial,-path'
 
-  group = 'org.apache.spark'
+  group = 'io.snappydata'
   version = '1.6.0-SNAPSHOT'
 
   ext {

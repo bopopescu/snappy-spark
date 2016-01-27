@@ -129,7 +129,7 @@ private[spark] class DiskBlockManager(blockManager: BlockManager, conf: SparkCon
    * of random number generator to be more efficient given that its not
    * critical to have this unique.
    */
-  private def newUnsecureRandomUUID(): UUID = {
+  private[sql] def newUnsecureRandomUUID(): UUID = {
     val randomBytes = new Array[Byte](16)
     DiskBlockManager.uuidRnd.nextBytes(randomBytes)
     randomBytes(6) = 0x0f
