@@ -1,5 +1,7 @@
 # Apache Spark
 
+[![Join the chat at https://gitter.im/SnappyDataInc/snappy-spark](https://badges.gitter.im/SnappyDataInc/snappy-spark.svg)](https://gitter.im/SnappyDataInc/snappy-spark?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
+
 Spark is a fast and general cluster computing system for Big Data. It provides
 high-level APIs in Scala, Java, Python, and R, and an optimized engine that
 supports general computation graphs for data analysis. It also supports a
